@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: authorization
+  aop:
+    proxy-target-class: true
+    auto: true
+  docker:
+    compose:
+      skip:
+        in-tests: true
+      file: authorization/src/main/docker/authorization-server/docker-compose.yml
+      lifecycle-management: start_only
+      readiness:
+        wait: never
+  datasource:
+    username: postgres
+    password: postgres
+    url: jdbc:postgresql://localhost:5433/postgres
+    jdbc-url: jdbc:postgresql://localhost:5433/postgres
+    hikari:
+      username: postgres
+      password: postgres
+      jdbc-url: jdbc:postgresql://localhost:5433/postgres
+      driver-class-name: org.postgresql.Driver
+    driver-class-name: org.postgresql.Driver
+  liquibase:
+    enabled: true
+    url: jdbc:postgresql://localhost:5433/postgres
+    user: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: validate

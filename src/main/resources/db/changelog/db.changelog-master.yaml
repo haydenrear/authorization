@@ -1,0 +1,130 @@
+databaseChangeLog:
+  - changeSet:
+      id: create_schema_if_not_exists
+      author: your_name
+      changes:
+        - sql:
+            splitStatements: false
+            stripComments: true
+            sql: |
+              CREATE SCHEMA IF NOT EXISTS public;
+  - changeSet:
+      id: create_root_ca_certificate_table
+      author: your_name
+      logicalFilePath: create_root_ca_certificate_table.yml
+      changes:
+        - createTable:
+            tableName: x509_root
+            columns:
+              - column:
+                  name: issuer_name
+                  type: VARCHAR(255)
+              - column:
+                  name: serial_number
+                  type: VARCHAR(255)
+              - column:
+                  name: subject_name
+                  type: VARCHAR(255)
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: certificate_value
+                  type: BYTEA
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_time
+                  type: DATETIME
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_time
+                  type: DATETIME
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: create_trusted_user_certificate_table
+      author: your_name
+      logicalFilePath: create_trusted_user_certificate_table.yml
+      changes:
+        - createTable:
+            tableName: x509_cert
+            columns:
+              - column:
+                  name: issuer_name
+                  type: VARCHAR(255)
+              - column:
+                  name: serial_number
+                  type: VARCHAR(255)
+              - column:
+                  name: subject_name
+                  type: VARCHAR(255)
+              - column:
+                  name: id
+                  autoIncrement: true
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: certificate_value
+                  type: BYTEA
+                  constraints:
+                    nullable: false
+              - column:
+                  name: root_certificate_id
+                  type: BIGINT
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_time
+                  type: DATETIME
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_time
+                  type: DATETIME
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: create_user_certificate_link_table
+      author: your_name
+      logicalFilePath: create_user_certificate_link_table.yml
+      changes:
+        - createTable:
+            tableName: x509_cert_link
+            columns:
+              - column:
+                  name: id
+                  autoIncrement: true
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: root_cert_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_certificate_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: x509_cert_link
+            baseColumnNames: root_cert_id
+            referencedTableName: x509_root
+            referencedColumnNames: id
+            constraintName: fk_x509_cert_link_root_cert_id
+        - addForeignKeyConstraint:
+            baseTableName: x509_cert_link
+            baseColumnNames: user_certificate_id
+            referencedTableName: x509_cert
+            referencedColumnNames: id
+            constraintName: fk_x509_cert_link_user_certificate_id
