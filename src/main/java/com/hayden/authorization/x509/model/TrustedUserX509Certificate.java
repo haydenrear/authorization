@@ -1,6 +1,6 @@
 package com.hayden.authorization.x509.model;
 
-import com.hayden.persistence.models.JdbcAudited;
+import com.hayden.persistence.models.Audited;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -10,7 +10,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Data
-public class TrustedUserX509Certificate extends JdbcAudited {
+public class TrustedUserX509Certificate extends Audited {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
