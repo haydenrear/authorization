@@ -7,7 +7,6 @@ import org.apache.commons.compress.utils.Lists;
 import org.bouncycastle.asn1.*;
 import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
-import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,8 +31,8 @@ public class ParseCertificateChain {
         Result<CertificateService.CertificateParseResult, CertificateService.CertificateParseAggregateError> next;
 
         while ((next = getIssuerCertificate(certificate)).isOk()) {
-            if (next.isPresent() && !next.get().certificate().isEmpty())  {
-                certChain.addAll(next.get().certificate());
+            if (next.r().isPresent() && !next.r().get().certificate().isEmpty())  {
+                certChain.addAll(next.r().get().certificate());
             } else {
                 break;
             }
@@ -42,7 +41,7 @@ public class ParseCertificateChain {
         var certErr = new CertificateService.CertificateParseAggregateError();
 
         if (next.isError()) {
-            certErr.add(next.error());
+            certErr.add(next.e().get());
         }
 
         return Result.from(new CertificateService.CertificateParseResult(certChain), certErr);
@@ -50,7 +49,7 @@ public class ParseCertificateChain {
 
     static Result<CertificateService.CertificateParseResult, CertificateService.CertificateParseAggregateError> getIssuerCertificate(X509Certificate certificate) {
         return retrieveAiaExtensionIfExists(certificate)
-                .orElse(Optional.empty())
+                .orElseRes(Optional.empty())
                 .map(ASN1Sequence::iterator)
                 .map(Lists::newArrayList)
                 .orElse(new ArrayList<>())

@@ -3,25 +3,16 @@ package com.hayden.authorization.x509.cert_store;
 import com.google.common.collect.Sets;
 import com.hayden.authorization.x509.model.X509CertificateId;
 import com.hayden.authorization.x509.model.X509RootCertificate;
-import com.hayden.utilitymodule.io.FileUtils;
 import com.hayden.utilitymodule.result.Agg;
 import com.hayden.utilitymodule.result.error.AggregateError;
-import com.hayden.utilitymodule.result.map.ResultCollectors;
 import com.hayden.utilitymodule.result.res.Responses;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
-import org.apache.commons.compress.utils.Lists;
-import org.bouncycastle.asn1.*;
-import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
-import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import com.hayden.utilitymodule.result.Result;
-import com.hayden.utilitymodule.result.error.Error;
+import com.hayden.utilitymodule.result.error.ErrorCollect;
 import org.jetbrains.annotations.NotNull;
-import org.postgresql.util.ByteStreamWriter;
-import org.springframework.stereotype.Service;
 
 import java.io.*;
-import java.net.URI;
 import java.nio.file.Path;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyStore;
@@ -39,7 +30,7 @@ import static com.hayden.authorization.x509.cert_store.ParseCertificateChain.par
 public class CertificateService {
 
 
-    public record CertificateParseError(String getMessage) implements Error { }
+    public record CertificateParseError(String getMessage) implements ErrorCollect { }
 
     public record CertificateParseResult(List<X509Certificate> certificate) implements Responses.AggregateResponse {
 
@@ -59,7 +50,7 @@ public class CertificateService {
         }
     }
 
-    public record CertificateParseAggregateError(Set<Error> errors) implements AggregateError {
+    public record CertificateParseAggregateError(Set<ErrorCollect> errors) implements AggregateError {
         public CertificateParseAggregateError(String message) {
             this(new CertificateParseError(message));
         }
@@ -100,7 +91,7 @@ public class CertificateService {
                                                                                                       X509RootCertificate x509RootCertificate,
                                                                                                       String alias) {
         return x509RootCertificate.toCert()
-                .flatMapResult(x -> doOnCertificateStore(keyStoreArgs, keystore -> {
+                .flatMapResultError(x -> doOnCertificateStore(keyStoreArgs, keystore -> {
                     try {
                         keystore.setCertificateEntry(alias, x);
                         return Result.ok(new X509CertificateId(x));

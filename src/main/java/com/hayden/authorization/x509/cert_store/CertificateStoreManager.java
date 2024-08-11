@@ -95,7 +95,7 @@ public class CertificateStoreManager {
         return FileUtils.getFileStream(certificateProperties.getCaCertificates())
                 .map(File::toPath)
                 .map(p -> Result.ok(p)
-                        .flatMapResult(CertificateService::loadCertificateFromPem)
+                        .flatMapResultError(CertificateService::loadCertificateFromPem)
                         .map(X509CertificateId::new)
                         .doOnError(e -> {})
                 )
