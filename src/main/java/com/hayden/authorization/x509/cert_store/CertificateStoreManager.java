@@ -16,6 +16,7 @@ import org.springframework.data.repository.query.FluentQuery;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -94,8 +95,8 @@ public class CertificateStoreManager {
     Set<X509CertificateId> retrieveCurrentOnDisk() {
         return FileUtils.getFileStream(certificateProperties.getCaCertificates())
                 .map(File::toPath)
-                .map(p -> Result.ok(p)
-                        .flatMapResultError(CertificateService::loadCertificateFromPem)
+                .map(p -> Result.<Path, CertificateService.CertificateParseError>ok(p)
+                        .flatMapResult(CertificateService::loadCertificateFromPem)
                         .map(X509CertificateId::new)
                         .doOnError(e -> {})
                 )

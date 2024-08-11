@@ -91,7 +91,8 @@ public class CertificateService {
                                                                                                       X509RootCertificate x509RootCertificate,
                                                                                                       String alias) {
         return x509RootCertificate.toCert()
-                .flatMapResultError(x -> doOnCertificateStore(keyStoreArgs, keystore -> {
+                .mapError(CertificateParseAggregateError::new)
+                .flatMapResult(x -> doOnCertificateStore(keyStoreArgs, keystore -> {
                     try {
                         keystore.setCertificateEntry(alias, x);
                         return Result.ok(new X509CertificateId(x));
