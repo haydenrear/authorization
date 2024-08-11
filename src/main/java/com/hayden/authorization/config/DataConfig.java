@@ -12,25 +12,4 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class DataConfig {
 
-    @Bean
-    JPAQueryFactory sqlQueryFactory(EntityManager dataSource) {
-        return new JPAQueryFactory(dataSource);
-    }
-
-    @Bean
-    CommandLineRunner commandLineRunner(JPAQueryFactory dataSource,
-                                        RootCaCertificateRepository rootCaCertificateRepository) {
-        return args -> {
-//            rootCaCertificateRepository.deleteAll();
-//            X509RootCertificate entity = new X509RootCertificate();
-//            entity.setCertificateValue(new byte[]{});
-//            entity = rootCaCertificateRepository.save(entity);
-//            var found = dataSource.selectFrom(QX509RootCertificate.x509RootCertificate)
-//                    .select(QX509RootCertificate.x509RootCertificate)
-//                    .fetch();
-//            System.out.println(found);
-
-        };
-    }
-
 }

@@ -4,11 +4,27 @@ import com.google.common.collect.Lists;
 import com.hayden.authorization.client_credentials.ClientCredentialsParentExtractor;
 import com.hayden.authorization.password.PasswordCredentialsAuthenticationProvider;
 import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationConverter;
+import com.hayden.authorization.web_authn.OAuth2WebAuthnAuthenticationConverter;
+import com.hayden.authorization.web_authn.OAuth2WebAuthnAuthenticationProvider;
+import com.hayden.authorization.x509.X509AuthenticationConverter;
+import com.hayden.authorization.x509.X509AuthenticationGrantType;
+import com.hayden.authorization.x509.OAuth2X509AuthenticationProvider;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.webauthn4j.WebAuthnManager;
+import com.webauthn4j.springframework.security.DefaultUserVerificationStrategy;
+import com.webauthn4j.springframework.security.UserVerificationStrategy;
+import com.webauthn4j.springframework.security.WebAuthnAuthenticationProvider;
+import com.webauthn4j.springframework.security.WebAuthnProcessingFilter;
+import com.webauthn4j.springframework.security.challenge.ChallengeRepository;
+import com.webauthn4j.springframework.security.challenge.HttpSessionChallengeRepository;
+import com.webauthn4j.springframework.security.credential.InMemoryWebAuthnCredentialRecordManager;
+import com.webauthn4j.springframework.security.credential.WebAuthnCredentialRecordService;
+import com.webauthn4j.springframework.security.server.ServerPropertyProvider;
+import com.webauthn4j.springframework.security.server.ServerPropertyProviderImpl;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
@@ -16,13 +32,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.*;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.OAuth2Token;
@@ -47,7 +59,7 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.oauth2.server.authorization.web.OAuth2ClientAuthenticationFilter;
 import org.springframework.security.oauth2.server.authorization.web.OAuth2TokenEndpointFilter;
 import org.springframework.security.oauth2.server.authorization.web.authentication.*;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.provisioning.UserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationConverter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -57,6 +69,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.ArrayList;
 import java.util.UUID;
 
 @Configuration
@@ -65,7 +78,7 @@ public class AuthorizationServerConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
+    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
             throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
@@ -88,7 +101,7 @@ public class AuthorizationServerConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http)
+    SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http)
             throws Exception {
         http
                 .authorizeHttpRequests((authorize) -> authorize
@@ -102,25 +115,6 @@ public class AuthorizationServerConfig {
         return http.build();
     }
 
-    @Bean
-    public UserDetailsService userDetailsService() {
-        UserDetails userDetails = User.withDefaultPasswordEncoder()
-                .username("user")
-                .password("password")
-                .roles("USER")
-                .build();
-
-        return new InMemoryUserDetailsManager(userDetails);
-    }
-
-
-
-    @Bean
-    DaoAuthenticationProvider  daoAuthenticationProvider() {
-        var d = new DaoAuthenticationProvider();
-        d.setUserDetailsService(userDetailsService());
-        return d;
-    }
 
     @Bean
     OAuth2AuthorizationService authorizationService() {
@@ -138,28 +132,62 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    BeanPostProcessor oAuth2ClientAuthenticationFilterProcessor(PasswordCredentialsAuthenticationProvider provider,
-                                                                ClientCredentialsParentExtractor extractor) {
+    BeanPostProcessor oAuth2ClientAuthenticationFilterProcessor(PasswordCredentialsAuthenticationProvider passwordCredentialsAuthenticationProvider,
+                                                                OAuth2X509AuthenticationProvider x509AuthenticationProvider,
+                                                                AuthenticationConverter authenticationConverterPassword,
+                                                                OAuth2WebAuthnAuthenticationProvider oAuth2WebAuthnAuthenticationProvider) {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
                 switch(bean) {
                     case OAuth2ClientAuthenticationFilter o -> o.setAuthenticationConverter(authenticationConverter());
-                    case OAuth2TokenEndpointFilter oAuth2TokenEndpointFilter -> oAuth2TokenEndpointFilter.setAuthenticationConverter(authenticationConverterPassword(extractor));
-                    case ProviderManager p -> addProviderAsFirst(p, provider);
+                    case OAuth2TokenEndpointFilter oAuth2TokenEndpointFilter -> oAuth2TokenEndpointFilter.setAuthenticationConverter(authenticationConverterPassword);
+                    case ProviderManager p -> {
+                        addProviderAsFirst(p, passwordCredentialsAuthenticationProvider);
+                        addProviderAsFirst(p, x509AuthenticationProvider);
+                        addProviderAsFirst(p, oAuth2WebAuthnAuthenticationProvider);
+                    }
                     default -> {}
                 }
-                return bean;
+                return BeanPostProcessor.super.postProcessBeforeInitialization(bean, beanName);
             }
         };
     }
+
+    @Bean
+    WebAuthnAuthenticationProvider webAuthnAuthenticationProvider() {
+        WebAuthnCredentialRecordService credentialRecordService = new InMemoryWebAuthnCredentialRecordManager();
+        WebAuthnManager webAuthnManager = WebAuthnManager.createNonStrictWebAuthnManager();
+
+        return new WebAuthnAuthenticationProvider(credentialRecordService, webAuthnManager);
+    }
+
+    @Bean
+    AuthenticationManager webAuthnAuthenticationManager() {
+        return new ProviderManager(webAuthnAuthenticationProvider());
+    }
+
+    /**
+     * For extracting the client credentials
+     * @return
+     */
+    @Bean
+    AuthenticationConverter parentDelegatingAuthenticationConverter() {
+        return new DelegatingAuthenticationConverter(
+                Lists.newArrayList(
+                        new ClientSecretPostAuthenticationConverter(),
+                        new JwtClientAssertionAuthenticationConverter(),
+                        new PublicClientAuthenticationConverter()
+                )
+        );
+    }
+
 
     @Bean
     AuthenticationConverter authenticationConverter() {
         return new DelegatingAuthenticationConverter(
                 Lists.newArrayList(
                         new ClientSecretPostAuthenticationConverter(),
-                        new ClientSecretBasicAuthenticationConverter(),
                         new JwtClientAssertionAuthenticationConverter(),
                         new PublicClientAuthenticationConverter()
                 )
@@ -167,11 +195,40 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    AuthenticationConverter authenticationConverterPassword(ClientCredentialsParentExtractor parentExtractor) {
+    HttpSessionChallengeRepository challengeRepository() {
+        return new HttpSessionChallengeRepository();
+    }
+
+    @Bean
+    ServerPropertyProvider serverPropertyProvider(ChallengeRepository challengeRepository) {
+        return new ServerPropertyProviderImpl(challengeRepository);
+    }
+
+    @Bean
+    UserVerificationStrategy userVerificationStrategy() {
+        return new DefaultUserVerificationStrategy();
+    }
+
+    @Bean
+    WebAuthnProcessingFilter webAuthnProcessingFilter(ServerPropertyProvider serverPropertyProvider,
+                                                      UserVerificationStrategy userVerificationStrategy) {
+        var w = new WebAuthnProcessingFilter(new ArrayList<>(), serverPropertyProvider, userVerificationStrategy);
+        w.setAuthenticationManager(webAuthnAuthenticationManager());
+        return w;
+    }
+
+
+    @Bean
+    AuthenticationConverter authenticationConverterPassword(ClientCredentialsParentExtractor parentExtractor,
+                                                            UserDetailsManager userDetailsManager,
+                                                            OAuth2WebAuthnAuthenticationConverter webAuthnAuthenticationConverter) {
         return new DelegatingAuthenticationConverter(
                 Lists.newArrayList(
                         new PasswordCredentialsGrantAuthenticationConverter(parentExtractor),
+                        new X509AuthenticationConverter(parentExtractor, userDetailsManager),
+                        webAuthnAuthenticationConverter,
                         new OAuth2AuthorizationCodeAuthenticationConverter(),
+                        new OAuth2DeviceCodeAuthenticationConverter(),
                         new OAuth2RefreshTokenAuthenticationConverter(),
                         new OAuth2ClientCredentialsAuthenticationConverter()
                 )
@@ -179,30 +236,41 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    public RegisteredClientRepository registeredClientRepository() {
+    RegisteredClientRepository registeredClientRepository() {
         RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("oidc-client")
+                .clientId("client")
                 .clientSecret("{noop}secret")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+                // used with the token jwkSetUrl
+//                .clientAuthenticationMethod(ClientAuthenticationMethod.PRIVATE_KEY_JWT)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.PASSWORD)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .authorizationGrantType(X509AuthenticationGrantType.X_509)
                 .redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
                 .postLogoutRedirectUri("http://127.0.0.1:8080/")
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .tokenSettings(TokenSettings.builder()
-                        .accessTokenFormat(OAuth2TokenFormat.REFERENCE)
+                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .build()
                 )
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(true)
+//                        .tokenEndpointAuthenticationSigningAlgorithm(SignatureAlgorithm.ES256)
+                        // validates the client's jwt assertion
+//                        .jwkSetUrl("...")
+                        .build()
+                )
                 .build();
 
         return new InMemoryRegisteredClientRepository(oidcClient);
     }
 
     @Bean
-    public JWKSource<SecurityContext> jwkSource() {
+    JWKSource<SecurityContext> jwkSource() {
         KeyPair keyPair = generateRsaKey();
         RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
         RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
@@ -213,6 +281,17 @@ public class AuthorizationServerConfig {
         JWKSet jwkSet = new JWKSet(rsaKey);
         return new ImmutableJWKSet<>(jwkSet);
     }
+
+    @Bean
+    JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
+        return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
+    }
+
+    @Bean
+    AuthorizationServerSettings authorizationServerSettings() {
+        return AuthorizationServerSettings.builder().build();
+    }
+
 
     private static KeyPair generateRsaKey() {
         KeyPair keyPair;
@@ -227,17 +306,8 @@ public class AuthorizationServerConfig {
         return keyPair;
     }
 
-    @Bean
-    public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
-        return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
-    }
-
-    @Bean
-    public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder().build();
-    }
-
-    private static void addProviderAsFirst(ProviderManager p, PasswordCredentialsAuthenticationProvider provider) {
+    private static void addProviderAsFirst(ProviderManager p,
+                                           AuthenticationProvider provider) {
         if (p.getProviders().stream().anyMatch(a -> a.supports(OAuth2AuthorizationCodeRequestAuthenticationToken.class))) {
             p.getProviders().addFirst(provider);
         }

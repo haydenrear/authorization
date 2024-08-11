@@ -1,10 +1,15 @@
 package com.hayden.authorization.x509.cert_store;
 
 import com.google.common.collect.Sets;
+import com.hayden.authorization.x509.model.X509CertificateId;
+import com.hayden.authorization.x509.model.X509RootCertificate;
+import com.hayden.utilitymodule.io.FileUtils;
 import com.hayden.utilitymodule.result.Agg;
 import com.hayden.utilitymodule.result.error.AggregateError;
 import com.hayden.utilitymodule.result.map.ResultCollectors;
 import com.hayden.utilitymodule.result.res.Responses;
+import lombok.Builder;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.compress.utils.Lists;
 import org.bouncycastle.asn1.*;
 import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
@@ -12,6 +17,7 @@ import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import com.hayden.utilitymodule.result.Result;
 import com.hayden.utilitymodule.result.error.Error;
 import org.jetbrains.annotations.NotNull;
+import org.postgresql.util.ByteStreamWriter;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -23,10 +29,13 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.*;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@Service
+import static com.hayden.authorization.x509.cert_store.ParseCertificateChain.parseCertificateChain;
+
+@UtilityClass
 public class CertificateService {
 
 
@@ -63,6 +72,7 @@ public class CertificateService {
         }
     }
 
+    @Builder
     public record KeyStoreArgs(Path keystorePath, char[] keystorePassword, KeyStoreType keyStoreType) {}
 
     public enum KeyStoreType {
@@ -73,8 +83,92 @@ public class CertificateService {
         return loadCertificateFromPem(certificate);
     }
 
-    public Result<CertificateParseResult, CertificateParseAggregateError> loadCertificates(KeyStoreArgs keystore) {
+    public static Result<X509CertificateId, CertificateParseAggregateError> removeCertificateToKeystore(KeyStoreArgs keyStoreArgs,
+                                                                                                        X509CertificateId x509RootCertificate,
+                                                                                                        String alias) {
+        return doOnCertificateStore(keyStoreArgs, keystore -> {
+                    try {
+                        keystore.deleteEntry(alias);
+                        return Result.ok(x509RootCertificate);
+                    } catch (KeyStoreException e) {
+                        return Result.err(new CertificateParseAggregateError("Error adding certificate to keystore with alias %s, subject %s, error message %s".formatted(alias, x509RootCertificate.getSubjectName(), e.getMessage())));
+                    }
+                });
+    }
 
+    public static Result<X509CertificateId, CertificateParseAggregateError> saveCertificateToKeystore(KeyStoreArgs keyStoreArgs,
+                                                                                                      X509RootCertificate x509RootCertificate,
+                                                                                                      String alias) {
+        return x509RootCertificate.toCert()
+                .flatMapResult(x -> doOnCertificateStore(keyStoreArgs, keystore -> {
+                    try {
+                        keystore.setCertificateEntry(alias, x);
+                        return Result.ok(new X509CertificateId(x));
+                    } catch (KeyStoreException e) {
+                        return Result.err(new CertificateParseAggregateError("Error adding certificate to keystore with alias %s, subject %s, error message %s".formatted(alias, x.getSubjectX500Principal().getName(), e.getMessage())));
+                    }
+                }));
+    }
+
+    public static Result<X509CertificateId, CertificateParseAggregateError> saveCertificateToDisk(Path caCertificatesDirectory, X509RootCertificate x509RootCertificate) {
+        try(FileOutputStream fos = new FileOutputStream(caCertificatesDirectory.toFile())) {
+            fos.write(x509RootCertificate.getCertificateValue());
+            return Result.ok(x509RootCertificate.getUniqueId());
+        } catch (IOException e) {
+            return Result.err(new CertificateParseAggregateError("Failed to write certificate to file: %s".formatted(e.getMessage())));
+        }
+    }
+
+    public static Result<X509CertificateId, CertificateParseAggregateError> removeCertificateToDisk(Path caCertificatesDirectory, X509CertificateId id) {
+        try {
+            if (caCertificatesDirectory.toFile().delete()) {
+                return Result.ok(id);
+            } else {
+                return Result.err(new CertificateParseAggregateError("Certificate entry could not be deleted."));
+            }
+        } catch (SecurityException s) {
+            return Result.err(new CertificateParseAggregateError("Could not delete - security manager responded: %s".formatted(s.getMessage())));
+        }
+    }
+
+    public static Result<CertificateParseResult, CertificateParseAggregateError> loadCertificates(KeyStoreArgs keystore) {
+
+        return doOnCertificateStore(keystore, keystoreLoaded -> {
+            var aggregateError = new CertificateParseAggregateError();
+            var certificateParseResult = new CertificateParseResult();
+
+            Enumeration<String> aliases;
+            try {
+                aliases = keystoreLoaded.aliases();
+            } catch (KeyStoreException e) {
+                return Result.err(new CertificateParseAggregateError("Failed to load certificate aliases."));
+            }
+
+            while (aliases.hasMoreElements()) {
+                try {
+                    PKIXParameters pkixParams = retrievePKIXParameters(keystoreLoaded);
+                    String alias = aliases.nextElement();
+                    retrieveX509Certificate(keystoreLoaded, alias)
+                            .ifPresentOrElse(
+                                    x509Certificate -> parseX509CertificateAndChain(x509Certificate, pkixParams, certificateParseResult, aggregateError),
+                                    () -> aggregateError.add(new CertificateParseAggregateError("Unknown certificate type found in keystore for %s.".formatted(alias)))
+                            );
+
+                } catch (KeyStoreException |
+                        InvalidAlgorithmParameterException e) {
+                    aggregateError.add(new CertificateParseAggregateError("Failed to parse cert %s.".formatted(e.getMessage())));
+                }
+
+            }
+
+            return Result.from(certificateParseResult, aggregateError);
+        });
+
+    }
+
+
+    public static <T> Result<T, CertificateParseAggregateError> doOnCertificateStore(KeyStoreArgs keystore,
+                                                                                     Function<KeyStore, Result<T, CertificateParseAggregateError>> toDo) {
         if (!keystore.keystorePath.toFile().exists() || keystore.keystorePath.toFile().isDirectory()) {
             return Result.err(new CertificateParseAggregateError("Keystore path %s did not exist.".formatted(keystore.keystorePath.toString())));
         }
@@ -85,55 +179,28 @@ public class CertificateService {
 
         try {
             keystoreLoaded = KeyStore.getInstance(keystore.keyStoreType.name());
+            try (FileInputStream fis = new FileInputStream(keystore.keystorePath.toFile())) {
+                keystoreLoaded.load(fis, keystorePassword);
+                return toDo.apply(keystoreLoaded);
+            } catch (NoSuchAlgorithmException | CertificateException | IOException e) {
+                return Result.err(new CertificateParseAggregateError("Failed to load keystore %s.".formatted(e.getMessage())));
+            }
         } catch (KeyStoreException e) {
             return Result.err(new CertificateParseAggregateError("Failed to load keystore %s.".formatted(e.getMessage())));
         }
-
-        var aggregateError = new CertificateParseAggregateError();
-        var certificateParseResult = new CertificateParseResult();
-
-        try (FileInputStream fis = new FileInputStream(keystore.keystorePath.toFile())) {
-            keystoreLoaded.load(fis, keystorePassword);
-
-            Enumeration<String> aliases = keystoreLoaded.aliases();
-
-            while (aliases.hasMoreElements()) {
-                try {
-
-                    PKIXParameters pkixParams = retrievePKIXParameters(keystoreLoaded);
-                    String alias = aliases.nextElement();
-                    retrieveX509Certificate(keystoreLoaded, alias)
-                            .ifPresentOrElse(
-                                    x509Certificate -> parseX509CertificateAndChain(x509Certificate, pkixParams, certificateParseResult, aggregateError),
-                                    () -> aggregateError.add(new CertificateParseAggregateError("Unknown certificate type found in keystore for %s.".formatted(alias)))
-                            );
-
-                } catch (
-                        KeyStoreException |
-                        InvalidAlgorithmParameterException e) {
-                    aggregateError.add(new CertificateParseAggregateError("Failed to parse cert %s.".formatted(e.getMessage())));
-                }
-
-            }
-        } catch (IOException |
-                 NoSuchAlgorithmException |
-                 CertificateException |
-                 KeyStoreException e) {
-            aggregateError.add(new CertificateParseAggregateError("Failed to load keystore %s.".formatted(e.getMessage())));
-        }
-
-
-        return Result.from(certificateParseResult, aggregateError);
     }
 
     private static Optional<X509Certificate> retrieveX509Certificate(KeyStore keystoreLoaded, String alias) throws KeyStoreException {
-        if (keystoreLoaded.getCertificate(alias) instanceof X509Certificate certificate)  {
+        if (keystoreLoaded.isCertificateEntry(alias)
+                && keystoreLoaded.getCertificate(alias) instanceof X509Certificate certificate)  {
             return Optional.of(certificate);
         }
         return Optional.empty();
     }
 
-    private static void parseX509CertificateAndChain(X509Certificate x509Certificate, PKIXParameters pkixParams, CertificateParseResult certificateParseResult, CertificateParseAggregateError aggregateError)  {
+    private static void parseX509CertificateAndChain(X509Certificate x509Certificate, PKIXParameters pkixParams,
+                                                     CertificateParseResult certificateParseResult,
+                                                     CertificateParseAggregateError aggregateError)  {
         List<X509Certificate> certChain = new ArrayList<>();
         certChain.add(x509Certificate);
 
@@ -182,30 +249,8 @@ public class CertificateService {
         return pkixParams;
     }
 
-    static Result<CertificateParseResult, CertificateParseAggregateError> parseCertificateChain(X509Certificate certificate){
-        List<X509Certificate> certChain = new ArrayList<>();
-        certChain.add(certificate);
 
-        Result<CertificateParseResult, CertificateService.CertificateParseAggregateError> next;
-
-        while ((next = getIssuerCertificate(certificate)).isOk()) {
-            if (next.isPresent() && !next.get().certificate().isEmpty())  {
-                certChain.addAll(next.get().certificate);
-            } else {
-                break;
-            }
-        }
-
-        var certErr = new CertificateParseAggregateError();
-
-        if (next.isError()) {
-            certErr.add(next.error());
-        }
-
-        return Result.from(new CertificateParseResult(certChain), certErr);
-    }
-
-    static Result<X509Certificate, CertificateParseError> loadCertificateFromPem(Path filePath) {
+    public static Result<X509Certificate, CertificateParseError> loadCertificateFromPem(Path filePath) {
         if (!filePath.toFile().exists() || filePath.toFile().isDirectory()) {
             return Result.err(new CertificateParseError("Path provided failed."));
         }
@@ -213,18 +258,28 @@ public class CertificateService {
                 FileInputStream fis = new FileInputStream(filePath.toFile());
                 BufferedInputStream bis = new BufferedInputStream(fis);
         ) {
-            Certificate parsedCert = CertificateFactory.getInstance("X.509").generateCertificate(bis);
-            if (parsedCert instanceof X509Certificate certificate) {
-                return Result.ok(certificate);
-            }
-
-            return Result.err(new CertificateParseError("Unknown certificate type: %s.".formatted(parsedCert.getClass().getName())));
-        } catch (CertificateException |
-                 IOException e) {
+            return loadCertificateFromPemBytes(bis.readAllBytes());
+        } catch (IOException e) {
             return Result.err(new CertificateParseError(e.getMessage()));
         }
-
     }
+
+    public static Result<X509Certificate, CertificateService.CertificateParseError> loadCertificateFromPemBytes(byte[] certificateValue) {
+        try {
+            var c = CertificateFactory.getInstance("X509");
+            var x = c.generateCertificate(new ByteArrayInputStream(certificateValue));
+            if (x instanceof X509Certificate x509) {
+                return Result.ok(x509);
+            }
+
+            return Result.err(new CertificateService.CertificateParseError("Found unknown certificate parse: %s."
+                    .formatted(x.getClass().getName())));
+        } catch (CertificateException e) {
+            return Result.err(new CertificateService.CertificateParseError("Could not find certificate factory: %s"
+                    .formatted(e.getMessage())));
+        }
+    }
+
 
     private static void addErrorsToResult(CertificateParseAggregateError aggregateError, List<? extends Certificate> value) {
         Optional.ofNullable(value)
@@ -246,80 +301,6 @@ public class CertificateService {
         certificateParseResult.add(new CertificateParseResult(x509));
     }
 
-    static Result<CertificateParseResult, CertificateService.CertificateParseAggregateError> getIssuerCertificate(X509Certificate certificate) {
-        return retrieveAiaExtensionIfExists(certificate)
-                .orElse(Optional.empty())
-                .map(ASN1Sequence::iterator)
-                .map(Lists::newArrayList)
-                .orElse(new ArrayList<>())
-                .stream()
-                .<Result<CertificateParseResult, CertificateParseAggregateError>>map(asn1Encodable -> {
-                    if (asn1Encodable instanceof ASN1Sequence accessDescription) {
-                        return getCaIssuerUrlOctet(accessDescription)
-                                .flatMapResult(accessLocationBytes -> {
-                                    String urlString = new String(accessLocationBytes);
-                                    return getNextCertChainFromUrl(urlString);
-                                });
-                    } else {
-                        return Result.err(new CertificateParseAggregateError("Could not parse encodable of type: %s.".formatted(asn1Encodable.getClass().getName())));
-                    }
-                })
-                .collect(ResultCollectors.from(
-                        new CertificateParseResult(),
-                        new CertificateParseAggregateError()
-                ));
-    }
-
-    public static Result<Optional<ASN1Sequence>, CertificateParseAggregateError> retrieveAiaExtensionIfExists(X509Certificate certificate) {
-        byte[] aiaExtensionValue = certificate.getExtensionValue("1.3.6.1.5.5.7.1.1");
-        if (aiaExtensionValue == null) {
-            return Result.ok(Optional.empty());
-        }
-
-        ASN1Primitive asn1Sequence;
-        try {
-            asn1Sequence = JcaX509ExtensionUtils.parseExtensionValue(aiaExtensionValue);
-        } catch (IOException e) {
-            return Result.err(new CertificateParseAggregateError("Error parsing asn1 extension value %s, %s".formatted(aiaExtensionValue, e.getMessage())));
-        }
-
-        if (!(asn1Sequence instanceof ASN1Sequence aiaSequence)) {
-            return Result.err(new CertificateParseAggregateError("Could not parse aid certificate extension of type %s."
-                    .formatted(asn1Sequence.getClass().getName())));
-        } else {
-            return Result.ok(Optional.of(aiaSequence));
-        }
-    }
-
-    public static Result<byte[], CertificateParseAggregateError> getCaIssuerUrlOctet(ASN1Sequence accessDescription) {
-        if (accessDescription.size() != 2) {
-            return Result.err(new CertificateParseAggregateError("Could not parse access description: %s.".formatted(Arrays.toString(accessDescription.toArray()))));
-        }
-
-        ASN1ObjectIdentifier accessMethod = (ASN1ObjectIdentifier) accessDescription.getObjectAt(0);
-        if (!accessMethod.equals(X509ObjectIdentifiers.id_ad_caIssuers) && !accessMethod.equals(X509ObjectIdentifiers.id_ad_ocsp)) {
-            return Result.err(new CertificateParseAggregateError("Unrecognized access method: %s.".formatted(accessMethod)));
-        }
-
-        ASN1TaggedObject objectAt1 = (ASN1TaggedObject) accessDescription.getObjectAt(1);
-        ASN1OctetString accessLocation = (DEROctetString) objectAt1.getBaseObject();
-        return Result.ok(accessLocation.getOctets());
-    }
-
-    private static Result<CertificateParseResult, CertificateParseAggregateError> getNextCertChainFromUrl(String urlString) {
-        try (InputStream in = URI.create(urlString).toURL().openStream()) {
-            CertificateFactory cf = CertificateFactory.getInstance("X.509");
-            Certificate result = cf.generateCertificate(in);
-
-            if (result instanceof X509Certificate x509Certificate) {
-                return Result.ok(new CertificateParseResult(x509Certificate));
-            }
-
-            return Result.err(new CertificateParseAggregateError("Found unknown cert type: %s.".formatted(result.getClass().getName())));
-        } catch (CertificateException | IOException e) {
-            return Result.err(new CertificateParseAggregateError("Failed to load cert: %s.".formatted(e.getMessage())));
-        }
-    }
 
 
 }

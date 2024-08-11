@@ -1,11 +1,10 @@
 package com.hayden.authorization.x509;
 
-import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationToken;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.*;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
@@ -17,14 +16,19 @@ import org.springframework.security.oauth2.server.authorization.context.Authoriz
 import org.springframework.security.oauth2.server.authorization.token.DefaultOAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
+import org.springframework.security.web.authentication.preauth.PreAuthenticatedAuthenticationProvider;
+import org.springframework.security.web.authentication.preauth.PreAuthenticatedGrantedAuthoritiesUserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
-public class X509AuthenticationProvider implements AuthenticationProvider {
+public class OAuth2X509AuthenticationProvider extends PreAuthenticatedAuthenticationProvider {
 
     private static final String ERROR_URI = "https://datatracker.ietf.org/doc/html/rfc6749#section-5.2";
     private final Log logger = LogFactory.getLog(getClass());
@@ -38,39 +42,45 @@ public class X509AuthenticationProvider implements AuthenticationProvider {
      * @param tokenGenerator the token generator
      * @since 0.2.3
      */
-    public X509AuthenticationProvider(OAuth2AuthorizationService authorizationService,
-                                      OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator) {
+    public OAuth2X509AuthenticationProvider(OAuth2AuthorizationService authorizationService,
+                                            OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator) {
         Assert.notNull(authorizationService, "authorizationService cannot be null");
         Assert.notNull(tokenGenerator, "tokenGenerator cannot be null");
         this.authorizationService = authorizationService;
         this.tokenGenerator = tokenGenerator;
+        this.setPreAuthenticatedUserDetailsService(new PreAuthenticatedGrantedAuthoritiesUserDetailsService());
     }
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-        PasswordCredentialsGrantAuthenticationToken clientCredentialsAuthentication =
-                (PasswordCredentialsGrantAuthenticationToken) authentication;
+        X509AuthenticationToken x509AuthenticationToken =
+                (X509AuthenticationToken) authentication;
 
-        OAuth2ClientAuthenticationToken clientPrincipal = clientCredentialsAuthentication.getConvert();
+        // no validation of the cert needed at this level, as the insertion of the cert into the keystore on the
+        // machine is the validation done by tomcat already.
+        var c = x509AuthenticationToken.getCertificate();
+
+        OAuth2ClientAuthenticationToken clientPrincipal = x509AuthenticationToken.getClientAuthentication();
         RegisteredClient registeredClient = clientPrincipal.getRegisteredClient();
 
         if (this.logger.isTraceEnabled()) {
             this.logger.trace("Retrieved registered client");
         }
 
-        if (!registeredClient.getAuthorizationGrantTypes().contains(AuthorizationGrantType.PASSWORD)) {
+        if (!registeredClient.getAuthorizationGrantTypes().contains(X509AuthenticationGrantType.X_509)) {
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.UNAUTHORIZED_CLIENT);
         }
 
         Set<String> authorizedScopes = Collections.emptySet();
-//        if (!CollectionUtils.isEmpty(clientCredentialsAuthentication.getScopes())) {
-//            for (String requestedScope : clientCredentialsAuthentication.getScopes()) {
-//                if (!registeredClient.getScopes().contains(requestedScope)) {
-//                    throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_SCOPE);
-//                }
-//            }
-//            authorizedScopes = new LinkedHashSet<>(clientCredentialsAuthentication.getScopes());
-//        }
+        if (!CollectionUtils.isEmpty(x509AuthenticationToken.getScopes())) {
+            for (String requestedScope : x509AuthenticationToken.getScopes()) {
+                if (!registeredClient.getScopes().contains(requestedScope)) {
+                    throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_SCOPE);
+                }
+            }
+            authorizedScopes = new LinkedHashSet<>(x509AuthenticationToken.getScopes());
+            authorizedScopes.addAll(x509AuthenticationToken.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toSet()));
+        }
 
         if (this.logger.isTraceEnabled()) {
             this.logger.trace("Validated token request parameters");
@@ -83,8 +93,8 @@ public class X509AuthenticationProvider implements AuthenticationProvider {
                 .authorizationServerContext(AuthorizationServerContextHolder.getContext())
                 .authorizedScopes(authorizedScopes)
                 .tokenType(OAuth2TokenType.ACCESS_TOKEN)
-                .authorizationGrantType(AuthorizationGrantType.PASSWORD)
-                .authorizationGrant(clientCredentialsAuthentication)
+                .authorizationGrantType(X509AuthenticationGrantType.X_509)
+                .authorizationGrant(x509AuthenticationToken)
                 .build();
         // @formatter:on
 
@@ -105,9 +115,12 @@ public class X509AuthenticationProvider implements AuthenticationProvider {
 
         // @formatter:off
         OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization.withRegisteredClient(registeredClient)
+                .id(clientPrincipal.getName())
                 .principalName(clientPrincipal.getName())
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .authorizationGrantType(AuthorizationGrantType.PASSWORD)
+                .token(accessToken)
                 .authorizedScopes(authorizedScopes);
+
         // @formatter:on
         if (generatedAccessToken instanceof ClaimAccessor) {
             authorizationBuilder.token(accessToken, (metadata) ->
@@ -129,8 +142,4 @@ public class X509AuthenticationProvider implements AuthenticationProvider {
         return new OAuth2AccessTokenAuthenticationToken(registeredClient, clientPrincipal, accessToken);
     }
 
-    @Override
-    public boolean supports(Class<?> authentication) {
-        return PasswordCredentialsGrantAuthenticationToken.class.isAssignableFrom(authentication);
-    }
 }

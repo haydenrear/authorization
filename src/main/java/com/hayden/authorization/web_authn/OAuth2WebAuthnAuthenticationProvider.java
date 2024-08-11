@@ -1,11 +1,10 @@
-package com.hayden.authorization.password;
+package com.hayden.authorization.web_authn;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
@@ -30,7 +29,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
-public class PasswordCredentialsAuthenticationProvider implements AuthenticationProvider {
+public class OAuth2WebAuthnAuthenticationProvider implements AuthenticationProvider {
 
     private static final String ERROR_URI = "https://datatracker.ietf.org/doc/html/rfc6749#section-5.2";
     private final Log logger = LogFactory.getLog(getClass());
@@ -38,7 +37,7 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
     private final OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator;
 
     @Autowired
-    private AuthenticationManager passwordAuthenticationManager;
+    private AuthenticationManager webAuthnAuthenticationManager;
 
     /**
      * Constructs an {@code OAuth2ClientCredentialsAuthenticationProvider} using the provided parameters.
@@ -47,8 +46,8 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
      * @param tokenGenerator the token generator
      * @since 0.2.3
      */
-    public PasswordCredentialsAuthenticationProvider(OAuth2AuthorizationService authorizationService,
-                                                     OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator) {
+    public OAuth2WebAuthnAuthenticationProvider(OAuth2AuthorizationService authorizationService,
+                                                OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator) {
         Assert.notNull(authorizationService, "authorizationService cannot be null");
         Assert.notNull(tokenGenerator, "tokenGenerator cannot be null");
         this.authorizationService = authorizationService;
@@ -57,33 +56,32 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-        PasswordCredentialsGrantAuthenticationToken clientCredentialsAuthentication =
-                (PasswordCredentialsGrantAuthenticationToken) authentication;
+        OAuth2WebAuthnAuthenticationToken webAuthnAuthenticationToken =
+                (OAuth2WebAuthnAuthenticationToken) authentication;
 
-        var usernamePasswordAuthToken = this.passwordAuthenticationManager.authenticate(clientCredentialsAuthentication.getUsernamePasswordAuthenticationToken());
-        clientCredentialsAuthentication.setUsernamePasswordAuthenticationToken((UsernamePasswordAuthenticationToken) usernamePasswordAuthToken);
-        clientCredentialsAuthentication = new PasswordCredentialsGrantAuthenticationToken(clientCredentialsAuthentication);
+        if (!webAuthnAuthenticationToken.getCredential().isAuthenticated())
+            return null;
 
-        OAuth2ClientAuthenticationToken clientPrincipal = clientCredentialsAuthentication.getClientAuthentication();
+        OAuth2ClientAuthenticationToken clientPrincipal = webAuthnAuthenticationToken.getClientAuthentication();
         RegisteredClient registeredClient = clientPrincipal.getRegisteredClient();
 
         if (this.logger.isTraceEnabled()) {
             this.logger.trace("Retrieved registered client");
         }
 
-        if (!registeredClient.getAuthorizationGrantTypes().contains(AuthorizationGrantType.PASSWORD)) {
+        if (!registeredClient.getAuthorizationGrantTypes().contains(OAuth2WebAuthnGrantType.WEB_AUTHN)) {
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.UNAUTHORIZED_CLIENT);
         }
 
         Set<String> authorizedScopes = Collections.emptySet();
-        if (!CollectionUtils.isEmpty(clientCredentialsAuthentication.getScopes())) {
-            for (String requestedScope : clientCredentialsAuthentication.getScopes()) {
+        if (!CollectionUtils.isEmpty(webAuthnAuthenticationToken.getScopes())) {
+            for (String requestedScope : webAuthnAuthenticationToken.getScopes()) {
                 if (!registeredClient.getScopes().contains(requestedScope)) {
                     throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_SCOPE);
                 }
             }
-            authorizedScopes = new LinkedHashSet<>(clientCredentialsAuthentication.getScopes());
-            authorizedScopes.addAll(clientCredentialsAuthentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toSet()));
+            authorizedScopes = new LinkedHashSet<>(webAuthnAuthenticationToken.getScopes());
+            authorizedScopes.addAll(webAuthnAuthenticationToken.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.toSet()));
         }
 
         if (this.logger.isTraceEnabled()) {
@@ -97,8 +95,8 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
                 .authorizationServerContext(AuthorizationServerContextHolder.getContext())
                 .authorizedScopes(authorizedScopes)
                 .tokenType(OAuth2TokenType.ACCESS_TOKEN)
-                .authorizationGrantType(AuthorizationGrantType.PASSWORD)
-                .authorizationGrant(clientCredentialsAuthentication)
+                .authorizationGrantType(OAuth2WebAuthnGrantType.WEB_AUTHN)
+                .authorizationGrant(webAuthnAuthenticationToken)
                 .build();
         // @formatter:on
 
@@ -120,7 +118,7 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
         // @formatter:off
         OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization.withRegisteredClient(registeredClient)
                 .principalName(clientPrincipal.getName())
-                .authorizationGrantType(AuthorizationGrantType.PASSWORD)
+                .authorizationGrantType(OAuth2WebAuthnGrantType.WEB_AUTHN)
                 .authorizedScopes(authorizedScopes);
         // @formatter:on
         if (generatedAccessToken instanceof ClaimAccessor) {
@@ -145,6 +143,6 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
 
     @Override
     public boolean supports(Class<?> authentication) {
-        return PasswordCredentialsGrantAuthenticationToken.class.isAssignableFrom(authentication);
+        return OAuth2WebAuthnAuthenticationToken.class.isAssignableFrom(authentication);
     }
 }

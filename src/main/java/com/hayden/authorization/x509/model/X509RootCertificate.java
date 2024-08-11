@@ -1,9 +1,14 @@
 package com.hayden.authorization.x509.model;
-
+import com.hayden.authorization.x509.cert_store.CertificateService;
 import com.hayden.persistence.models.Audited;
+import com.hayden.utilitymodule.result.Result;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.io.ByteArrayInputStream;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,4 +46,9 @@ public class X509RootCertificate extends Audited {
         }
         certificateLink.add(userX509Certificate);
     }
+
+    public Result<X509Certificate, CertificateService.CertificateParseError> toCert() {
+        return CertificateService.loadCertificateFromPemBytes(this.certificateValue);
+    }
+
 }

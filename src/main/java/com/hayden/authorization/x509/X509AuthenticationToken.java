@@ -1,19 +1,19 @@
 package com.hayden.authorization.x509;
 
+import com.hayden.authorization.oauth2.OAuth2CustomAuthenticationToken;
 import lombok.Getter;
-import lombok.experimental.Delegate;
-import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientAuthenticationToken;
+import org.springframework.security.web.authentication.preauth.PreAuthenticatedAuthenticationToken;
 
 import java.security.cert.X509Certificate;
 import java.util.Collection;
 
 @Getter
-public class X509AuthenticationToken extends AbstractAuthenticationToken {
+public class X509AuthenticationToken extends PreAuthenticatedAuthenticationToken implements OAuth2CustomAuthenticationToken {
 
-    @Delegate
-    private final OAuth2ClientAuthenticationToken convert;
+    private final OAuth2ClientAuthenticationToken clientAuthentication;
+
     private final X509Certificate certificate;
 
     /**
@@ -25,9 +25,39 @@ public class X509AuthenticationToken extends AbstractAuthenticationToken {
     public X509AuthenticationToken(Collection<? extends GrantedAuthority> authorities,
                                    OAuth2ClientAuthenticationToken convert,
                                    X509Certificate certificate) {
-        super(authorities);
-        this.convert = convert;
+        super(certificate.getIssuerX500Principal(), certificate, authorities);
+        this.clientAuthentication = convert;
         this.certificate = certificate;
+    }
+
+    @Override
+    public Collection<GrantedAuthority> getAuthorities() {
+        return super.getAuthorities();
+    }
+
+    @Override
+    public String getName() {
+        return certificate.getSubjectX500Principal().getName();
+    }
+
+    @Override
+    public Object getCredentials() {
+        return certificate;
+    }
+
+    @Override
+    public Object getPrincipal() {
+        return certificate.getSubjectX500Principal();
+    }
+
+    @Override
+    public boolean isAuthenticated() {
+        return true;
+    }
+
+    @Override
+    public void setAuthenticated(boolean authenticated) {
+        super.setAuthenticated(authenticated);
     }
 
 }

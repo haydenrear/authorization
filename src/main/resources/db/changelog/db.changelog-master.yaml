@@ -17,6 +17,16 @@ databaseChangeLog:
             tableName: x509_root
             columns:
               - column:
+                  name: created_by
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: modified_by
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
                   name: issuer_name
                   type: VARCHAR(255)
               - column:
@@ -81,6 +91,16 @@ databaseChangeLog:
                   type: BIGINT
                   constraints:
                     nullable: true
+              - column:
+                  name: created_by
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: modified_by
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
               - column:
                   name: created_time
                   type: DATETIME

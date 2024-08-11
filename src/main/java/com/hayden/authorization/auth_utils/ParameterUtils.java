@@ -24,28 +24,12 @@ public class ParameterUtils {
     }
 
     public static boolean isGrantType(HttpServletRequest request, AuthorizationGrantType grantType) {
-        return Optional.ofNullable(request.getParameterValues(OAuth2ParameterNames.GRANT_TYPE))
-                .map(s -> {
-                    if (s.length > 1) {
-                        throw new UnsupportedOperationException("Grant type contained more than one parameter value!");
-                    }
-
-                    return s[0];
-                })
-                .filter(s -> Objects.equals(s, grantType.getValue()))
-                .isPresent();
+        return isGrantType(request, grantType.getValue());
     }
 
     public static boolean isGrantType(HttpServletRequest request, String grantType) {
-        return Optional.ofNullable(request.getParameterValues(OAuth2ParameterNames.GRANT_TYPE))
-                .map(s -> {
-                    if (s.length > 1) {
-                        throw new UnsupportedOperationException("Grant type contained more than one parameter value!");
-                    }
-
-                    return s[0];
-                })
-                .filter(s -> Objects.equals(s, grantType))
+        return grantType(request)
+                .filter(s -> s.equals(grantType))
                 .isPresent();
     }
 }
