@@ -12,6 +12,8 @@ version = "0.0.1-SNAPSHOT"
 
 tasks.register("prepareKotlinBuildScriptModel")
 
+
+
 dependencies {
     compileOnly("org.projectlombok:lombok")
 
