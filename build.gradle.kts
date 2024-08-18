@@ -12,15 +12,11 @@ version = "0.0.1-SNAPSHOT"
 
 tasks.register("prepareKotlinBuildScriptModel")
 
-
-
 dependencies {
-    compileOnly("org.projectlombok:lombok")
-
-    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 
     implementation(project(":utilitymodule"))
     implementation(project(":jpa-persistence"))
+
     implementation("org.springframework.boot:spring-boot-starter-oauth2-authorization-server")
     implementation("com.webauthn4j:webauthn4j-spring-security-core:0.10.0.RELEASE")
 
