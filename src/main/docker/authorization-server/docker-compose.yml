@@ -1,13 +1,13 @@
 services:
-  postgres:
+  authorization-server-postgres:
     image: localhost:5001/postgres-pgvector
-    container_name: int-postgres
+    container_name: authorization-server-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
       - authorization-server-postgres:/var/lib/postgresql/data
     ports:
-      - 5433:5432
+      - "5433:5432"
 volumes:
   authorization-server-postgres:
