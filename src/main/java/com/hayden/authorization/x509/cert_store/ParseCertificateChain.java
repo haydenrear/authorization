@@ -41,7 +41,7 @@ public class ParseCertificateChain {
         var certErr = new CertificateService.CertificateParseAggregateError();
 
         if (next.isError()) {
-            certErr.add(next.e().get());
+            certErr.addAgg(next.e().get());
         }
 
         return Result.from(new CertificateService.CertificateParseResult(certChain), certErr);

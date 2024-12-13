@@ -3,9 +3,9 @@ package com.hayden.authorization.x509.cert_store;
 import com.google.common.collect.Sets;
 import com.hayden.authorization.x509.model.X509CertificateId;
 import com.hayden.authorization.x509.model.X509RootCertificate;
-import com.hayden.utilitymodule.result.Agg;
-import com.hayden.utilitymodule.result.error.AggregateError;
-import com.hayden.utilitymodule.result.res.Responses;
+import com.hayden.utilitymodule.result.agg.Agg;
+import com.hayden.utilitymodule.result.agg.AggregateError;
+import com.hayden.utilitymodule.result.agg.Responses;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import com.hayden.utilitymodule.result.Result;
@@ -43,14 +43,14 @@ public class CertificateService {
         }
 
         @Override
-        public void add(Agg t) {
+        public void addAgg(Agg t) {
             if (t instanceof CertificateParseResult r) {
                 this.certificate.addAll(r.certificate);
             }
         }
     }
 
-    public record CertificateParseAggregateError(Set<ErrorCollect> errors) implements AggregateError {
+    public record CertificateParseAggregateError(Set<ErrorCollect> errors) implements AggregateError.StdAggregateError {
         public CertificateParseAggregateError(String message) {
             this(new CertificateParseError(message));
         }
@@ -143,12 +143,12 @@ public class CertificateService {
                     retrieveX509Certificate(keystoreLoaded, alias)
                             .ifPresentOrElse(
                                     x509Certificate -> parseX509CertificateAndChain(x509Certificate, pkixParams, certificateParseResult, aggregateError),
-                                    () -> aggregateError.add(new CertificateParseAggregateError("Unknown certificate type found in keystore for %s.".formatted(alias)))
+                                    () -> aggregateError.addAgg(new CertificateParseAggregateError("Unknown certificate type found in keystore for %s.".formatted(alias)))
                             );
 
                 } catch (KeyStoreException |
                         InvalidAlgorithmParameterException e) {
-                    aggregateError.add(new CertificateParseAggregateError("Failed to parse cert %s.".formatted(e.getMessage())));
+                    aggregateError.addAgg(new CertificateParseAggregateError("Failed to parse cert %s.".formatted(e.getMessage())));
                 }
 
             }
@@ -212,7 +212,7 @@ public class CertificateService {
                             .stream()
                             .collect(Collectors.partitioningBy(c -> c instanceof X509Certificate));
 
-            certChainFound.ifPresent(certificateParseResult::add);
+            certChainFound.ifPresent(certificateParseResult::addAgg);
             addCertsToResult(certificateParseResult, isX509.get(true));
             addErrorsToResult(aggregateError, isX509.get(false));
 
@@ -220,7 +220,7 @@ public class CertificateService {
                  CertificateException |
                  NoSuchAlgorithmException |
                  InvalidAlgorithmParameterException e) {
-            aggregateError.add(new CertificateParseAggregateError("Failed to parse cert: %s.".formatted(e.getMessage())));
+            aggregateError.addAgg(new CertificateParseAggregateError("Failed to parse cert: %s.".formatted(e.getMessage())));
         }
     }
 
@@ -279,7 +279,7 @@ public class CertificateService {
                 .flatMap(Collection::stream)
                 .flatMap(c -> c instanceof X509Certificate ? Stream.empty() : Stream.of(c))
                 .map(c -> new CertificateParseAggregateError("Unknown certificate found: %s.".formatted(c)))
-                .forEach(aggregateError::add);
+                .forEach(aggregateError::addAgg);
     }
 
     private static void addCertsToResult(CertificateParseResult certificateParseResult,
@@ -290,7 +290,7 @@ public class CertificateService {
                 .flatMap(c -> c instanceof X509Certificate x ? Stream.of(x) : Stream.empty())
                 .toList();
 
-        certificateParseResult.add(new CertificateParseResult(x509));
+        certificateParseResult.addAgg(new CertificateParseResult(x509));
     }
 
 
