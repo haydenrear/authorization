@@ -88,7 +88,8 @@ public class CertificateStoreManager {
                         .map(X509CertificateId::new)
                         .map(Result::ok)
                 )
-                .flatMap(Result::stream)
+                // TODO: propagate error
+                .flatMap(r -> r.one().stream())
                 .collect(Collectors.toSet());
     }
 
@@ -100,7 +101,8 @@ public class CertificateStoreManager {
                         .map(X509CertificateId::new)
                         .doOnError(e -> {})
                 )
-                .flatMap(s -> s.optional().stream())
+                // TODO: propagate error
+                .flatMap(s -> s.one().stream())
                 .collect(Collectors.toSet());
     }
 

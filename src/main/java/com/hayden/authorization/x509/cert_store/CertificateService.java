@@ -9,7 +9,7 @@ import com.hayden.utilitymodule.result.agg.Responses;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import com.hayden.utilitymodule.result.Result;
-import com.hayden.utilitymodule.result.error.ErrorCollect;
+import com.hayden.utilitymodule.result.error.SingleError;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
@@ -30,7 +30,7 @@ import static com.hayden.authorization.x509.cert_store.ParseCertificateChain.par
 public class CertificateService {
 
 
-    public record CertificateParseError(String getMessage) implements ErrorCollect { }
+    public record CertificateParseError(String getMessage) implements SingleError { }
 
     public record CertificateParseResult(List<X509Certificate> certificate) implements Responses.AggregateResponse {
 
@@ -50,7 +50,7 @@ public class CertificateService {
         }
     }
 
-    public record CertificateParseAggregateError(Set<ErrorCollect> errors) implements AggregateError.StdAggregateError {
+    public record CertificateParseAggregateError(Set<SingleError> errors) implements AggregateError.StdAggregateError {
         public CertificateParseAggregateError(String message) {
             this(new CertificateParseError(message));
         }

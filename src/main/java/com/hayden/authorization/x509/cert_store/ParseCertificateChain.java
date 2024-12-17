@@ -49,6 +49,7 @@ public class ParseCertificateChain {
 
     static Result<CertificateService.CertificateParseResult, CertificateService.CertificateParseAggregateError> getIssuerCertificate(X509Certificate certificate) {
         return retrieveAiaExtensionIfExists(certificate)
+                .one()
                 .orElseRes(Optional.empty())
                 .map(ASN1Sequence::iterator)
                 .map(Lists::newArrayList)
