@@ -30,8 +30,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Slf4j
 public class SocialRegistrationOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
-    private final OAuth2AuthorizedClientService authorizationService;
-    private final OAuth2AuthorizedClientRepository authorizedClientRepository;
+
     private final CdcUserRepository cdcUserRepository;
     private final PasswordEncoder passwordEncoder;
 

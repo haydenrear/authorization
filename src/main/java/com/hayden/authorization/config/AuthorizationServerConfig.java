@@ -170,8 +170,9 @@ public class AuthorizationServerConfig {
                 switch (bean) {
                     case OAuth2ClientAuthenticationFilter o ->
                             o.setAuthenticationConverter(authenticationConverter());
-                    case OAuth2TokenEndpointFilter oAuth2TokenEndpointFilter ->
+                    case OAuth2TokenEndpointFilter oAuth2TokenEndpointFilter -> {
                             oAuth2TokenEndpointFilter.setAuthenticationConverter(authenticationConverterPassword);
+                    }
                     case ProviderManager p -> {
                         addProviderAsFirst(p, passwordCredentialsAuthenticationProvider);
                         addProviderAsFirst(p, x509AuthenticationProvider);

@@ -33,6 +33,7 @@ public class CdcUserDetailsManager implements UserDetailsManager {
 
     @Override
     public void updateUser(UserDetails user) {
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
