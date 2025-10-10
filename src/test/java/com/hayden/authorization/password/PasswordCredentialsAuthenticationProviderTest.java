@@ -13,6 +13,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -36,10 +38,13 @@ public class PasswordCredentialsAuthenticationProviderTest {
     MockMvc mockMvc;
     @Autowired
     JwtDecoder jwtDecoder;
+    @Autowired
+    ClientRegistrationRepository clientRegistrationRepository;
 
     @SneakyThrows
     @Test
     public void doTestPasswordCreds() {
+
         mockMvc.perform(
                         post("/oauth2/token")
                                 .with(csrf())

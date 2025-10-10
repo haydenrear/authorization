@@ -1,7 +1,10 @@
 package com.hayden.authorization.config;
 
+import com.hayden.authorization.user.CdcUser;
+import com.hayden.authorization.user.CdcUserDetails;
+import com.hayden.authorization.user.CdcUserDetailsManager;
 import lombok.SneakyThrows;
-import org.apache.commons.compress.utils.Lists;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.jdbc.init.DataSourceScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.DatabaseInitializationMode;
@@ -9,22 +12,24 @@ import org.springframework.boot.sql.init.DatabaseInitializationSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.annotation.Order;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.jdbc.JdbcDaoImpl;
 import org.springframework.security.crypto.password.NoOpPasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
 
 import javax.sql.DataSource;
-import java.util.List;
+import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Objects;
 
+@Slf4j
 @Configuration
 public class AuthenticationConfig {
 
@@ -32,23 +37,28 @@ public class AuthenticationConfig {
     @SneakyThrows
     @Bean
     @Profile("test-auth")
-    public CommandLineRunner initializeAuth(DataSource dataSource, UserDetailsService userDetailsService) {
+    public CommandLineRunner initializeAuth(DataSource dataSource,
+                                            CdcUserDetailsManager userDetailsService) {
         initializeDatabase(dataSource);
         insertUser(userDetailsService);
         return args -> {};
     }
 
-
+    @SneakyThrows
     @Bean
-    public UserDetailsService userDetailsService(DataSource dataSource) {
-        return new JdbcUserDetailsManager(dataSource);
+    @Profile("!test-auth")
+    public CommandLineRunner initializeDb(DataSource dataSource) {
+        initializeDatabase(dataSource);
+        return args -> {};
     }
 
+
     @Bean
-    DaoAuthenticationProvider daoAuthenticationProvider(UserDetailsService userDetailsService) {
+    DaoAuthenticationProvider daoAuthenticationProvider(CdcUserDetails userDetailsService,
+                                                        PasswordEncoder passwordEncoder) {
         var d = new DaoAuthenticationProvider();
         d.setUserDetailsService(userDetailsService);
-        d.setPasswordEncoder(NoOpPasswordEncoder.getInstance());
+        d.setPasswordEncoder(passwordEncoder);
         return d;
     }
 
@@ -58,20 +68,39 @@ public class AuthenticationConfig {
         return p;
     }
 
-    private static void insertUser(UserDetailsService userDetailsService) {
-        if (userDetailsService instanceof JdbcUserDetailsManager mgr && !mgr.userExists("user")) {
-            mgr.createUser(
-                    User.withUsername("user")
-                            .password("password")
-                            .roles("USER")
-                            .build()
-            );
-        }
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return NoOpPasswordEncoder.getInstance();
+    }
+
+    private static void insertUser(CdcUserDetailsManager mgr) {
+        mgr.createUser(
+                User.withUsername("user")
+                        .password("password")
+                        .roles("USER")
+                        .build());
     }
 
     private static void initializeDatabase(DataSource dataSource) throws Exception {
         DatabaseInitializationSettings settings = new DatabaseInitializationSettings();
-        settings.setSchemaLocations(List.of("classpath:%s".formatted("schema.sql")));
+        var found = Arrays.stream(new PathMatchingResourcePatternResolver().getResources("classpath*:*schema.sql"))
+                .peek(s -> {
+                    log.info("Found resource {}", s);
+                })
+                .filter(Resource::exists)
+                .map(r -> {
+                    try {
+                        return r.getFile();
+                    } catch (IOException e) {
+                        log.error("Error {}", e);
+                    }
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .map(File::getAbsolutePath)
+                .map(s -> "file:" + s)
+                .toList();
+        settings.setSchemaLocations(found);
         settings.setMode(DatabaseInitializationMode.ALWAYS);
         var i = new DataSourceScriptDatabaseInitializer(dataSource, settings) ;
         i.afterPropertiesSet();

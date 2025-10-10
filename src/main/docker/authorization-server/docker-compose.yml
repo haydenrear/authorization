@@ -6,8 +6,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
-      - authorization-server-postgres:/var/lib/postgresql/data
+      - authorization-postgres:/var/lib/postgresql/data
     ports:
       - "5433:5432"
 volumes:
-  authorization-server-postgres:
+  authorization-postgres:
