@@ -1,6 +1,5 @@
 package com.hayden.authorization.config;
 
-import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserDetails;
 import com.hayden.authorization.user.CdcUserDetailsManager;
 import lombok.SneakyThrows;
@@ -18,10 +17,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.JdbcUserDetailsManager;
 
 import javax.sql.DataSource;
 import java.io.File;

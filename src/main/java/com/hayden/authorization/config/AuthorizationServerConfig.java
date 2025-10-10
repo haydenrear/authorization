@@ -5,12 +5,10 @@ import com.hayden.authorization.client_credentials.ClientCredentialsParentExtrac
 import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
 import com.hayden.authorization.password.PasswordCredentialsAuthenticationProvider;
 import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationConverter;
-import com.hayden.authorization.user.CdcUser;
-import com.hayden.authorization.user.CdcUserRepository;
+import com.hayden.authorization.x509.KeyFiles;
 import com.hayden.authorization.x509.X509AuthenticationConverter;
 import com.hayden.authorization.x509.X509AuthenticationGrantType;
 import com.hayden.authorization.x509.OAuth2X509AuthenticationProvider;
-import com.hayden.utilitymodule.stream.StreamUtil;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -19,16 +17,12 @@ import com.nimbusds.jose.proc.SecurityContext;
 import jakarta.ws.rs.HttpMethod;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.RequestEntity;
-import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.*;
 import org.springframework.security.config.Customizer;
@@ -40,15 +34,11 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
-import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
-import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
-import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.client.web.AuthenticatedPrincipalOAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
@@ -76,9 +66,7 @@ import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.web.util.UriComponents;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.URI;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
+import java.security.*;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.*;
@@ -87,6 +75,9 @@ import java.util.*;
 @Configuration
 @EnableWebSecurity
 public class AuthorizationServerConfig {
+
+    @Autowired
+    private KeyFiles keyFiles;
 
     @Bean
     @Order(1)
@@ -305,11 +296,14 @@ public class AuthorizationServerConfig {
         RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)
-                .keyID(UUID.randomUUID()
-                           .toString())
+                .keyID(UUID.randomUUID().toString())
                 .build();
         JWKSet jwkSet = new JWKSet(rsaKey);
         return new ImmutableJWKSet<>(jwkSet);
+    }
+
+    KeyPair generateRsaKey() {
+        return keyFiles.getKeyPair();
     }
 
     @Bean
@@ -323,18 +317,6 @@ public class AuthorizationServerConfig {
                                           .build();
     }
 
-
-    private static KeyPair generateRsaKey() {
-        KeyPair keyPair;
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
-            keyPair = keyPairGenerator.generateKeyPair();
-        } catch (Exception ex) {
-            throw new IllegalStateException(ex);
-        }
-        return keyPair;
-    }
 
     private static void addProviderAsFirst(ProviderManager p,
                                            AuthenticationProvider provider) {
