@@ -15,7 +15,10 @@ spring:
           github:
             client-id: Ov23li6AX6ixxIAZ8llp
             client-secret: 1b9adb0902df6f97555c6c3b2934ab2685406556
-            scope: read:user, user:email
+            scope:
+              - user
+              - user:email
+              - read:user
         provider:
           cdc:
             authorization-uri: http://localhost:8080/oauth2/authorize

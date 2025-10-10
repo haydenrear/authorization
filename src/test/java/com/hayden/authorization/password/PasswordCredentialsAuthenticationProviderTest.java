@@ -21,10 +21,12 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -44,14 +46,14 @@ public class PasswordCredentialsAuthenticationProviderTest {
     @SneakyThrows
     @Test
     public void doTestPasswordCreds() {
-
+        AtomicReference<String> s = new AtomicReference<>();
         mockMvc.perform(
                         post("/oauth2/token")
                                 .with(csrf())
                                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                                 .param("grant_type", AuthorizationGrantType.PASSWORD.getValue())
-                                .param("client_id", "client")
-                                .param("client_secret", "secret")
+                                .param("client_id", "cdc-oauth2-client")
+                                .param("client_secret", "234234lkjsldkdjfsd")
                                 .header(HttpHeaders.AUTHORIZATION, "Basic %s".formatted(Base64.encode("user:password")))
                 )
                 .andExpect(status().is2xxSuccessful())
@@ -60,6 +62,7 @@ public class PasswordCredentialsAuthenticationProviderTest {
                     @Override
                     public boolean matches(Object o) {
                         var decoded = Assertions.assertDoesNotThrow(() -> jwtDecoder.decode(o.toString()));
+                        s.set(o.toString());
                         var decodedScopes = Assertions.assertDoesNotThrow(() -> decoded.getClaimAsStringList("scope"));
                         return Stream.of("ROLE_USER", "openid", "profile")
                                 .allMatch(decodedScopes::contains);
@@ -76,6 +79,19 @@ public class PasswordCredentialsAuthenticationProviderTest {
                     }
                 })))
                 .andDo(print());
+
+        mockMvc.perform(
+                       get("/api/v1/credits/get-credits")
+                               .with(csrf())
+                               .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                               .param("grant_type", AuthorizationGrantType.JWT_BEARER.getValue())
+                               .param("client_id", "cdc-oauth2-client")
+                               .param("client_secret", "234234lkjsldkdjfsd")
+                               .header(HttpHeaders.AUTHORIZATION, "Bearer %s".formatted(s.get()))
+               )
+               .andExpect(status().is2xxSuccessful())
+               .andExpect(jsonPath("$", Matchers.notNullValue()))
+               .andDo(print());
     }
 
 }

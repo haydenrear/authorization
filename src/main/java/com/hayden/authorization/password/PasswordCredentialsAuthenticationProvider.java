@@ -122,6 +122,7 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
                 .principalName(clientPrincipal.getName())
                 .authorizationGrantType(AuthorizationGrantType.PASSWORD)
                 .authorizedScopes(authorizedScopes);
+
         // @formatter:on
         if (generatedAccessToken instanceof ClaimAccessor) {
             authorizationBuilder.token(accessToken, (metadata) ->

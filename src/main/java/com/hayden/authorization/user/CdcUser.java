@@ -45,7 +45,10 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     private Map<String, Object> metadata = new HashMap<>();
 
     @Column
-    private String apiKey;
+    private String authorizationCode;
+
+    @Column(length = 2048)
+    private String jwtToken;
 
     /**
      * TODO: email password if github for looking inside todo dashboard

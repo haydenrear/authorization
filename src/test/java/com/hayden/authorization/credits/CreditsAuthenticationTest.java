@@ -34,7 +34,7 @@ public class CreditsAuthenticationTest {
     @Test
     public void testPaymentIncrement() {
         mockMvc.perform(
-                        post("/api/v1/credits/increment")
+                        post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                                 .header("Stripe-Signature", "hello!")
@@ -57,8 +57,8 @@ public class CreditsAuthenticationTest {
                                .with(csrf())
                                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                                .param("grant_type", AuthorizationGrantType.PASSWORD.getValue())
-                               .param("client_id", "client")
-                               .param("client_secret", "secret")
+                               .param("client_id", "cdc-oauth2-client")
+                               .param("client_secret", "234234lkjsldkdjfsd")
                                .header(HttpHeaders.AUTHORIZATION, "Basic %s".formatted(Base64.encode("whatever:hello!!!")))
                )
                .andExpect(redirectedUrl("http://localhost/login"))
