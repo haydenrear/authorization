@@ -1,6 +1,7 @@
 package com.hayden.authorization.x509;
 
-import com.hayden.authorization.config.KeyConfigProperties;
+import com.hayden.utilitymodule.security.KeyConfigProperties;
+import com.hayden.utilitymodule.security.KeyFiles;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,8 +10,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
-
-import java.security.KeyPair;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

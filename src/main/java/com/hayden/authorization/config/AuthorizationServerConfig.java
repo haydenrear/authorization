@@ -5,7 +5,8 @@ import com.hayden.authorization.client_credentials.ClientCredentialsParentExtrac
 import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
 import com.hayden.authorization.password.PasswordCredentialsAuthenticationProvider;
 import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationConverter;
-import com.hayden.authorization.x509.KeyFiles;
+import com.hayden.utilitymodule.security.KeyConfigProperties;
+import com.hayden.utilitymodule.security.KeyFiles;
 import com.hayden.authorization.x509.X509AuthenticationConverter;
 import com.hayden.authorization.x509.X509AuthenticationGrantType;
 import com.hayden.authorization.x509.OAuth2X509AuthenticationProvider;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -74,6 +76,7 @@ import java.util.*;
 @Slf4j
 @Configuration
 @EnableWebSecurity
+@Import({KeyConfigProperties.class, KeyFiles.class})
 public class AuthorizationServerConfig {
 
     @Autowired
