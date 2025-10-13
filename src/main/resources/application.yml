@@ -4,6 +4,7 @@ spring:
       client:
         registration:
           cdc:
+            provider: cdc
             client-id: cdc-oauth2-client
             client-secret: 234234lkjsldkdjfsd
             scope: profile, email
