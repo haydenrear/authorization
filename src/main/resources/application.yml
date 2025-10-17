@@ -1,4 +1,8 @@
+
 spring:
+  dgs:
+    graphql:
+      enabled: false
   security:
     oauth2:
       client:

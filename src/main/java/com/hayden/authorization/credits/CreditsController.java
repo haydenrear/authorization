@@ -1,6 +1,7 @@
 package com.hayden.authorization.credits;
 
 import com.hayden.authorization.user.CdcUserRepository;
+import com.hayden.commitdiffmodel.credits.CreditsResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,18 +16,15 @@ public class CreditsController {
 
     private final CdcUserRepository userRepository;
 
-
     @PostMapping("/stripe/add-credits")
     public ResponseEntity<Void> increment(@RequestHeader("Stripe-Signature") String sigHeader,
                                           @RequestBody String payload) {
         return ResponseEntity.ok().build();
     }
 
-    public record GetCreditsResult(String whatever) {}
-
     @GetMapping(value = "/get-credits", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<GetCreditsResult> increment(@AuthenticationPrincipal Jwt authenticatedPrincipal) {
-        return ResponseEntity.ok().body(new GetCreditsResult("hello"));
+    public ResponseEntity<CreditsResponse> increment(@AuthenticationPrincipal Jwt authenticatedPrincipal) {
+        return ResponseEntity.ok(CreditsResponse.builder().build());
     }
 
 }

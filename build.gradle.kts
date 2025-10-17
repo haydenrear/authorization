@@ -2,6 +2,7 @@ import Com_hayden_docker_gradle.DockerContext
 import java.nio.file.Paths
 
 plugins {
+    id("com.hayden.graphql-data-service")
     id("com.hayden.spring-app")
     id("com.hayden.observable-app")
     id("com.hayden.jpa-persistence")
@@ -76,6 +77,7 @@ dependencies {
 
     implementation(project(":utilitymodule"))
     implementation(project(":jpa-persistence"))
+    implementation(project(":commit-diff-model"))
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     implementation("org.springframework.boot:spring-boot-starter-oauth2-authorization-server")

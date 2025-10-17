@@ -5,6 +5,7 @@ import com.hayden.authorization.client_credentials.ClientCredentialsParentExtrac
 import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
 import com.hayden.authorization.password.PasswordCredentialsAuthenticationProvider;
 import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationConverter;
+import com.hayden.commitdiffmodel.config.DisableGraphQl;
 import com.hayden.utilitymodule.security.KeyConfigProperties;
 import com.hayden.utilitymodule.security.KeyFiles;
 import com.hayden.authorization.x509.X509AuthenticationConverter;
@@ -76,7 +77,7 @@ import java.util.*;
 @Slf4j
 @Configuration
 @EnableWebSecurity
-@Import({KeyConfigProperties.class, KeyFiles.class})
+@Import({KeyConfigProperties.class, KeyFiles.class, DisableGraphQl.class})
 public class AuthorizationServerConfig {
 
     @Autowired
