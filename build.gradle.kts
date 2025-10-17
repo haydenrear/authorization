@@ -57,7 +57,7 @@ if (enableDocker && buildCommitDiffContext) {
     }
 
     tasks.register("buildDocker") {
-        dependsOn("bootJar", "copyJar", "authorizationServerDockerImage", "pushImages")
+        dependsOn("bootJar", "copyJar", "authorizationServerDockerImage")
         doLast {
             delete(fileTree(Paths.get(projectDir.path, "src/main/docker")) {
                 include("**/*.jar")
