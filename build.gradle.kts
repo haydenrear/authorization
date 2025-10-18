@@ -16,6 +16,7 @@ plugins {
 
 val registryBase = project.property("registryBase") ?: "localhost:5001"
 
+
 wrapDocker {
     ctx = arrayOf(
         DockerContext(
@@ -33,39 +34,25 @@ tasks.register("prepareKotlinBuildScriptModel")
 
 val enableDocker = project.property("enable-docker")?.toString()?.toBoolean()?.or(false) ?: false
 val buildCommitDiffContext = project.property("build-authorization-server")?.toString()?.toBoolean()?.or(false) ?: false
-tasks.register("copyJar") {
-    dependsOn("bootJar")
-    println(projectDir.path)
-    delete {
-        fileTree(Paths.get(projectDir.path,"src/main/docker")) {
-            include("**/*.jar")
-        }
-    }
-    copy {
-        duplicatesStrategy = DuplicatesStrategy.INCLUDE
-        from(Paths.get(projectDir.path, "build/libs"))
-        into(Paths.get(projectDir.path,"src/main/docker"))
-        include("authorization-server.jar")
-    }
-}
 
 if (enableDocker && buildCommitDiffContext) {
     tasks.getByPath("bootJar").finalizedBy("buildDocker")
 
     tasks.getByPath("bootJar").doLast {
-        tasks.getByPath("authorizationServerDockerImage").dependsOn("copyJar")
-        tasks.getByPath("pushImages").dependsOn("copyJar")
+        tasks.getByPath("authorizationServerDockerImage")
+            .dependsOn(project(":runner_code").tasks.getByName("runnerTask"), "copyJar")
     }
 
     tasks.register("buildDocker") {
-        dependsOn("bootJar", "copyJar", "authorizationServerDockerImage")
+        dependsOn("copyJar", "authorizationServerDockerImage")
         doLast {
-            delete(fileTree(Paths.get(projectDir.path, "src/main/docker")) {
+            delete(fileTree(file(layout.projectDirectory).resolve("src/main/docker")) {
                 include("**/*.jar")
             })
         }
     }
 }
+
 
 tasks.bootJar {
     archiveFileName = "authorization-server.jar"
@@ -78,6 +65,7 @@ dependencies {
     implementation(project(":utilitymodule"))
     implementation(project(":jpa-persistence"))
     implementation(project(":commit-diff-model"))
+    implementation(project(":runner_code"))
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     implementation("org.springframework.boot:spring-boot-starter-oauth2-authorization-server")

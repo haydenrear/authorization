@@ -39,26 +39,27 @@ spring:
     auto: true
   docker:
     compose:
-      file: {{PROJ_DIR}}/src/main/docker/authorization-server/docker-compose.yml
+      file: ${DOCKER_COMPOSE_FILE:{{PROJ_DIR}}/src/main/docker/authorization-server/docker-compose.yml}
       lifecycle-management: start_only
       readiness:
         wait: never
       skip:
         in-tests: false
+      enabled: ${DOCKER_COMPOSE_ENABLED:true}
   datasource:
     username: postgres
     password: postgres
-    url: jdbc:postgresql://localhost:5433/postgres
-    jdbc-url: jdbc:postgresql://localhost:5433/postgres
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
+    jdbc-url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
     hikari:
       username: postgres
       password: postgres
-      jdbc-url: jdbc:postgresql://localhost:5433/postgres
+      jdbc-url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
       driver-class-name: org.postgresql.Driver
     driver-class-name: org.postgresql.Driver
   liquibase:
     enabled: true
-    url: jdbc:postgresql://localhost:5433/postgres
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
     user: postgres
     password: postgres
   jpa:
