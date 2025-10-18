@@ -16,15 +16,22 @@ plugins {
 
 val registryBase = project.property("registryBase") ?: "localhost:5001"
 
+val enableDocker = project.property("enable-docker")?.toString()?.toBoolean()?.or(false) ?: false
+val buildCommitDiffContext = project.property("build-authorization-server")?.toString()?.toBoolean()?.or(false) ?: false
+
+var arrayOf = arrayOf(
+    DockerContext(
+        "${registryBase}/authorization-server",
+        "${project.projectDir}/src/main/docker",
+        "authorizationServer"
+    )
+)
+
+if (!enableDocker || !buildCommitDiffContext)
+    arrayOf = emptyArray<DockerContext>()
 
 wrapDocker {
-    ctx = arrayOf(
-        DockerContext(
-            "${registryBase}/authorization-server",
-            "${project.projectDir}/src/main/docker",
-            "authorizationServer"
-        )
-    )
+    ctx = arrayOf
 }
 
 group = "com.hayden"
@@ -32,8 +39,6 @@ version = "0.0.1-SNAPSHOT"
 
 tasks.register("prepareKotlinBuildScriptModel")
 
-val enableDocker = project.property("enable-docker")?.toString()?.toBoolean()?.or(false) ?: false
-val buildCommitDiffContext = project.property("build-authorization-server")?.toString()?.toBoolean()?.or(false) ?: false
 
 if (enableDocker && buildCommitDiffContext) {
     tasks.getByPath("bootJar").finalizedBy("buildDocker")
