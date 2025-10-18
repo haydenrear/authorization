@@ -1,5 +1,4 @@
 import Com_hayden_docker_gradle.DockerContext
-import java.nio.file.Paths
 
 plugins {
     id("com.hayden.graphql-data-service")
@@ -37,7 +36,7 @@ wrapDocker {
 group = "com.hayden"
 version = "0.0.1-SNAPSHOT"
 
-tasks.register("prepareKotlinBuildScriptModel")
+//tasks.register("prepareKotlinBuildScriptModel")
 
 
 if (enableDocker && buildCommitDiffContext) {
@@ -57,7 +56,6 @@ if (enableDocker && buildCommitDiffContext) {
         }
     }
 }
-
 
 tasks.bootJar {
     archiveFileName = "authorization-server.jar"
@@ -80,3 +78,4 @@ dependencies {
 tasks.compileJava {
     dependsOn("processYmlFiles")
 }
+
