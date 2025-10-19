@@ -6,7 +6,6 @@ import com.hayden.authorization.user.CdcUserRepository;
 import com.hayden.authorization.user.QCdcUser;
 import com.hayden.commitdiffmodel.credits.CreditsResponse;
 import com.hayden.commitdiffmodel.credits.GetAndDecrementCreditsRequest;
-import com.hayden.commitdiffmodel.stripe.StripeCheckoutSession;
 import com.hayden.commitdiffmodel.stripe.PaymentData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
