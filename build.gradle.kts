@@ -75,7 +75,9 @@ dependencies {
     implementation("org.modelmapper:modelmapper:3.0.0")
 
     // Stripe Java SDK for webhook validation
-    implementation("com.stripe:stripe-java:25.0.0")
+// https://mvnrepository.com/artifact/com.stripe/stripe-java
+    implementation("com.stripe:stripe-java:30.0.0")
+    testImplementation("com.google.code.gson:gson:2.11.0")
 }
 
 tasks.compileJava {

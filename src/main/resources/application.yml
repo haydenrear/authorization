@@ -1,4 +1,6 @@
 
+stripe:
+  webhook-secret: hello
 spring:
   dgs:
     graphql:

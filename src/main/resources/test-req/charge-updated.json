@@ -1,0 +1,144 @@
+{
+  "id": "evt_3SK5cFRE2HMtvBnh0ZpHXF51",
+  "object": "event",
+  "api_version": "2025-09-30.clover",
+  "created": 1760914943,
+  "data": {
+    "object": {
+      "id": "ch_3SK5cFRE2HMtvBnh0sHNfgH3",
+      "object": "charge",
+      "amount": 2000,
+      "amount_captured": 2000,
+      "amount_refunded": 0,
+      "application": null,
+      "application_fee": null,
+      "application_fee_amount": null,
+      "balance_transaction": "txn_3SK5cFRE2HMtvBnh0mwAcxVF",
+      "billing_details": {
+        "address": {
+          "city": null,
+          "country": null,
+          "line1": null,
+          "line2": null,
+          "postal_code": null,
+          "state": null
+        },
+        "email": null,
+        "name": null,
+        "phone": null,
+        "tax_id": null
+      },
+      "calculated_statement_descriptor": "Stripe",
+      "captured": true,
+      "created": 1760914940,
+      "currency": "usd",
+      "customer": null,
+      "description": "(created by Stripe CLI)",
+      "destination": null,
+      "dispute": null,
+      "disputed": false,
+      "failure_balance_transaction": null,
+      "failure_code": null,
+      "failure_message": null,
+      "fraud_details": {},
+      "livemode": false,
+      "metadata": {},
+      "on_behalf_of": null,
+      "order": null,
+      "outcome": {
+        "advice_code": null,
+        "network_advice_code": null,
+        "network_decline_code": null,
+        "network_status": "approved_by_network",
+        "reason": null,
+        "risk_level": "normal",
+        "risk_score": 10,
+        "seller_message": "Payment complete.",
+        "type": "authorized"
+      },
+      "paid": true,
+      "payment_intent": "pi_3SK5cFRE2HMtvBnh0Ahuc3vC",
+      "payment_method": "pm_1SK5cFRE2HMtvBnhTiUYcVb1",
+      "payment_method_details": {
+        "card": {
+          "amount_authorized": 2000,
+          "authorization_code": "002451",
+          "brand": "visa",
+          "checks": {
+            "address_line1_check": null,
+            "address_postal_code_check": null,
+            "cvc_check": "pass"
+          },
+          "country": "US",
+          "exp_month": 10,
+          "exp_year": 2026,
+          "extended_authorization": {
+            "status": "disabled"
+          },
+          "fingerprint": "ZVy1srjwDBtB5P1Y",
+          "funding": "credit",
+          "incremental_authorization": {
+            "status": "unavailable"
+          },
+          "installments": null,
+          "last4": "4242",
+          "mandate": null,
+          "multicapture": {
+            "status": "unavailable"
+          },
+          "network": "visa",
+          "network_token": {
+            "used": false
+          },
+          "network_transaction_id": "908612149115114",
+          "overcapture": {
+            "maximum_amount_capturable": 2000,
+            "status": "unavailable"
+          },
+          "regulated_status": "unregulated",
+          "three_d_secure": null,
+          "wallet": null
+        },
+        "type": "card"
+      },
+      "radar_options": {},
+      "receipt_email": null,
+      "receipt_number": null,
+      "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xU0p6MjhSRTJITXR2Qm5oKP7b1ccGMgZM6DJgkDE6LBYEduWXxFxIDIR9QF0CeUeTVL1DDL1RZ6U1-4iRitD9A3zligfeW2oYEXPS",
+      "refunded": false,
+      "review": null,
+      "shipping": {
+        "address": {
+          "city": "San Francisco",
+          "country": "US",
+          "line1": "510 Townsend St",
+          "line2": null,
+          "postal_code": "94103",
+          "state": "CA"
+        },
+        "carrier": null,
+        "name": "Jenny Rosen",
+        "phone": null,
+        "tracking_number": null
+      },
+      "source": null,
+      "source_transfer": null,
+      "statement_descriptor": null,
+      "statement_descriptor_suffix": null,
+      "status": "succeeded",
+      "transfer_data": null,
+      "transfer_group": null
+    },
+    "previous_attributes": {
+      "balance_transaction": null,
+      "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xU0p6MjhSRTJITXR2Qm5oKP_b1ccGMgbW-zNr2mo6LBbNzws0OysDsqdqS2EOgFr08gQfqyhX7UN0AQx8c5hmWyPkc36rNyXm1p5r"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 2,
+  "request": {
+    "id": null,
+    "idempotency_key": null
+  },
+  "type": "charge.updated"
+}

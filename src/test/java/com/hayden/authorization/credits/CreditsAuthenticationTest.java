@@ -3,7 +3,6 @@ package com.hayden.authorization.credits;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserRepository;
-import com.hayden.commitdiffmodel.credits.CreditsResponse;
 import com.hayden.commitdiffmodel.credits.GetAndDecrementCreditsRequest;
 import com.unboundid.util.Base64;
 import lombok.SneakyThrows;
@@ -23,6 +22,7 @@ import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
@@ -39,11 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ExtendWith(SpringExtension.class)
 @AutoConfigureMockMvc
-@TestPropertySource(
-        properties = {
-                "stripe.webhook-secret="
-        }
-)
+@ActiveProfiles("test")
 public class CreditsAuthenticationTest {
 
     @Autowired

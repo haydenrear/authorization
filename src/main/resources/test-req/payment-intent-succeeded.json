@@ -1,21 +1,3 @@
-### GET request to example server
-POST http://localhost:8080/oauth2/token
-Authorization: Basic dXNlcjpwYXNzd29yZA==
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=password&client_id=client&client_secret=secret
-
-###
-
-GET http://localhost:8080/api/v1/credits/get-credits
-Authorization: Bearer eyJraWQiOiI2NDJhMmZiNy1iOTExLTRiMjYtOTI0NS02NTA2ODk4MDZjNDIiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI0NDA3Njc0NyIsImF1ZCI6ImNkYy1vYXV0aDItY2xpZW50IiwibmJmIjoxNzYwMTI0MjQ2LCJleHAiOjE3NjAxMjQ1NDYsImlhdCI6MTc2MDEyNDI0NiwianRpIjoiMjg2ZWZkYWQtYTRiOC00OGI2LTk0ZjEtYWY3OGE0MTk5NWI4In0.TmghsEv7X1A5CMAp3kkzHAMPsZvJ_fO1O19Jmzg7qOAEWmY8vQaWudULhEFLDsVASVNyJ3vQK9isAcou-_2bMy0XMR0F39CG9Lj36bW17QwDZRcVWvwReT_V89c8jq4IuKGvrwOtqQz8s-yMKFih9EkyxQe4q9K0UkigdDVFi33qsqA9BFOaT2LdQliAnPc8BBj0ok43cYvYiSOmPmcDEQJ2jIIKzhc8FJZBkrz7_Pr_BIyPZKt85huI72QL56WgO2Xkcb43paiA8Trklx_AEAiHbBlPfjJaEceQqW9q5kj8U27SjbxzH79zPEXA31PhpwvwZ_1KIRs1dKeHLjoVng
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&client_id=cdc-oauth2-client&client_secret=234234lkjsldkdjfsd
-
-###
-< {%
-    var payload = `
 {
   "id": "evt_3SK5cFRE2HMtvBnh0A0w8uyU",
   "object": "event",
@@ -97,17 +79,3 @@ grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&client_id=cdc-oauth2-clie
   },
   "type": "payment_intent.succeeded"
 }
- `
-
-    var first = Date.now().toString()
-    client.global.set("now", first)
-    var t = crypto.hmac.sha256().withTextSecret("hello").updateWithText(first + "." + payload)
-    client.global.set("sig", t.digest().toHex())
-    client.global.set("p", payload)
-%}
-POST http://localhost:8080/api/v1/credits/stripe/add-credits
-Content-Type: application/json
-Stripe-Signature: v1=hello,t={{now}},v1={{sig}}
-
-{{p}}
-###

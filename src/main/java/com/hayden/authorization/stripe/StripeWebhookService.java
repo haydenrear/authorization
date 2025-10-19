@@ -1,5 +1,9 @@
 package com.hayden.authorization.stripe;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.PaymentIntent;
 import com.hayden.commitdiffmodel.stripe.PaymentData;
@@ -8,12 +12,16 @@ import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.net.Webhook;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Service for validating and processing Stripe webhooks.
@@ -26,6 +34,7 @@ public class StripeWebhookService {
 
     private final StripeConfigProps stripeConfig;
     private final ModelMapper modelMapper;
+    private final ObjectMapper objectMapper;
 
     /**
      * Validates the Stripe webhook signature and returns the parsed event if valid.
@@ -38,38 +47,69 @@ public class StripeWebhookService {
         try {
             String webhookSecret = stripeConfig.getWebhookSecretToUse();
 
+
             if (StringUtils.isBlank(webhookSecret)) {
                 String secretNotConfigured = "Stripe webhook secret not configured";
                 log.warn(secretNotConfigured);
                 return PaymentData.builder()
                         .success(false)
+                        .status(401)
                         .errorMessage(secretNotConfigured)
                         .build();
             }
 
-            if (!Objects.equals(sigHeader, webhookSecret)) {
+            var sig = getSignatures(sigHeader, Webhook.Signature.EXPECTED_SCHEME);
+
+            if (sig.stream().filter(Objects::nonNull).noneMatch(st -> Objects.equals(st, webhookSecret))) {
                 return PaymentData.builder()
                         .success(false)
                         .errorMessage("Webhook secret did not match.")
+                        .status(401)
                         .build();
             }
 
             Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
 
             return Optional.ofNullable(event)
-                    .flatMap(evt -> Optional.ofNullable(evt.getDataObjectDeserializer()))
-                            .flatMap(EventDataObjectDeserializer::getObject)
+                    .flatMap(evt -> {
+                        var d = Optional.ofNullable(evt.getDataObjectDeserializer());
+
+                        if (d.isEmpty())
+                            return Optional.empty();
+
+                        else {
+                            var g = d.get();
+                            var obj = g.getObject();
+                            return obj;
+                        }
+                    })
                     .map(so -> switch(so) {
                         case PaymentIntent pi -> {
+                            var address = Optional.ofNullable(pi.getCustomerObject())
+                                    .flatMap(c -> Optional.ofNullable(c.getAddress()))
+                                            .or(() -> Optional.ofNullable(pi.getShipping()).flatMap(s -> Optional.ofNullable(s.getAddress())))
+                                    .map(add -> modelMapper.map(add, PaymentData.Address.class));
+                            var phone = Optional.ofNullable(pi.getCustomerObject())
+                                    .flatMap(c -> Optional.ofNullable(c.getPhone()))
+                                    .or(() -> Optional.ofNullable(pi.getShipping()).flatMap(s -> Optional.ofNullable(s.getPhone())));
+                            var name = Optional.ofNullable(pi.getCustomerObject())
+                                    .flatMap(c -> Optional.ofNullable(c.getName()))
+                                    .or(() -> Optional.ofNullable(pi.getShipping())
+                                            .flatMap(s -> Optional.ofNullable(s.getName())));
+                            var email = Optional.ofNullable(pi.getCustomerObject())
+                                    .flatMap(c -> Optional.ofNullable(c.getEmail()))
+                                    .or(() -> Optional.ofNullable(pi.getReceiptEmail()))
+                                    .or(() -> Optional.ofNullable(pi.getOnBehalfOfObject())
+                                            .flatMap(ac -> Optional.ofNullable(ac.getEmail())));
                             var pd = PaymentData.builder()
                                     .idempotentId(pi.getId())
                                     .sessionData(
                                             PaymentData.SessionData
                                                     .builder()
-                                                    .name(pi.getCustomerObject().getName())
-                                                    .email(pi.getCustomerObject().getEmail())
-                                                    .ph(pi.getCustomerObject().getPhone())
-                                                    .address(modelMapper.map(pi.getCustomerObject().getAddress(), PaymentData.Address.class))
+                                                    .name(name.orElse(null))
+                                                    .email(email.orElse(null))
+                                                    .ph(phone.orElse(null))
+                                                    .address(address.orElse(null))
                                                     .build()
                                     )
                                     .amountPaid(pi.getAmountReceived())
@@ -77,20 +117,24 @@ public class StripeWebhookService {
                             yield switch(event.getType()) {
                                 case "payment_intent.payment_failed"  -> {
                                     yield pd.success(false)
+                                            .status(200)
                                             .errorMessage("Payment seemed to fail.")
                                             .build();
                                 }
                                 case "payment_intent.succeeded" ->
                                         pd.success(true)
+                                                .status(200)
                                                 .build();
                                 case "payment_intent.canceled"  ->
                                         pd.success(false)
                                                 .errorMessage("Payment was cancelled")
+                                                .status(200)
                                                 .build();
                                 default ->
                                         pd.success(false)
                                                 .errorMessage("Unknown event type: %s"
                                                         .formatted(event.getType()))
+                                                .status(404)
                                                 .build();
                             };
                             // idempotency: check if event.getId() already processed in your DB
@@ -99,22 +143,26 @@ public class StripeWebhookService {
                         default -> PaymentData.builder().success(false)
                                 .errorMessage("Unknown event type: %s"
                                         .formatted(event.getType()))
+                                .status(200)
                                 .build();
                     })
                     .orElseGet(() -> PaymentData.builder().success(false)
                             .errorMessage("No event type provided.")
+                            .status(200)
                             .build());
 
         } catch (SignatureVerificationException e) {
             log.error("Error - invalid stripe signature [redacted].");
             return PaymentData.builder()
                     .errorMessage("Stripe error: invalid signature.")
+                    .status(401)
                     .success(false)
                     .build();
         } catch (Exception e) {
             log.error("Unknown error processing stripe of type {} [redacted]", e.getClass().getName());
             return PaymentData.builder()
                     .errorMessage("Stripe error: invalid signature.")
+                    .status(500)
                     .success(false)
                     .build();
         }
@@ -130,4 +178,17 @@ public class StripeWebhookService {
         return (int) (amountCents * stripeConfig.getCreditsPerCent());
     }
 
+    private static List<String> getSignatures(String sigHeader, String scheme) {
+        List<String> signatures = new ArrayList<String>();
+        String[] items = sigHeader.split(",", -1);
+
+        for (String item : items) {
+            String[] itemParts = item.split("=", 2);
+            if (itemParts[0].equals(scheme)) {
+                signatures.add(itemParts[1]);
+            }
+        }
+
+        return signatures;
+    }
 }

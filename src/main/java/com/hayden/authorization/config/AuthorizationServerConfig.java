@@ -31,6 +31,7 @@ import org.springframework.security.authentication.*;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.JdbcOAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
@@ -66,6 +67,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationConverter;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.util.UriComponents;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -113,7 +115,7 @@ public class AuthorizationServerConfig {
                                                    SocialRegistrationSuccessHandler socialRegistrationSuccessHandler)
             throws Exception {
         http.authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers(HttpMethod.POST, "/api/v1/credits/stripe/**")
+                        .requestMatchers("/api/v1/credits/stripe/**")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
@@ -124,6 +126,7 @@ public class AuthorizationServerConfig {
                                        .authorizedClientService(authorizationClientService)
                                        .authorizedClientRepository(authorizedClientRepository))
                 .httpBasic(Customizer.withDefaults())
+                .csrf(CsrfConfigurer::disable)
                 .formLogin(Customizer.withDefaults());
 
         return http.build();

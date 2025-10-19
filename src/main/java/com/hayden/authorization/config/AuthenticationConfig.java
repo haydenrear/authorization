@@ -1,16 +1,19 @@
 package com.hayden.authorization.config;
 
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.hayden.authorization.user.CdcUserDetails;
 import com.hayden.authorization.user.CdcUserDetailsManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.boot.jdbc.init.DataSourceScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.DatabaseInitializationMode;
 import org.springframework.boot.sql.init.DatabaseInitializationSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
@@ -30,6 +33,14 @@ import java.util.Objects;
 @Slf4j
 @Configuration
 public class AuthenticationConfig {
+
+    @Bean
+    public Jackson2ObjectMapperBuilderCustomizer customizer() {
+        return obj  -> {
+            obj.failOnUnknownProperties(false);
+            obj.failOnEmptyBeans(false);
+        };
+    }
 
 
     @SneakyThrows

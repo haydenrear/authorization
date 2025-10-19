@@ -36,11 +36,12 @@ public class CreditsController {
     @PostMapping("/stripe/add-credits")
     public ResponseEntity<Void> handleStripeWebhook(@RequestHeader("Stripe-Signature") String sigHeader,
                                                      @RequestBody String payload) {
-        PaymentData event = stripeWebhookService.validateAndParseWebhook(payload, sigHeader);
+            PaymentData event = stripeWebhookService.validateAndParseWebhook(payload, sigHeader);
+        System.out.println(payload);
         
         if (event.isFailure()) {
             log.warn("Invalid or unverifiable Stripe webhook received");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(event.status()).build();
         }
 
         if (event.sessionData() == null) {
@@ -101,7 +102,7 @@ public class CreditsController {
         
         if (principalId == null || clientId == null) {
             log.warn("JWT missing required claims: sub or client_id");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, clientId);
