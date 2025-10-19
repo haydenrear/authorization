@@ -23,7 +23,7 @@ public class CreditsController {
     }
 
     @GetMapping(value = "/get-credits", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<CreditsResponse> increment(@AuthenticationPrincipal Jwt authenticatedPrincipal) {
+    public ResponseEntity<CreditsResponse> getCredits(@AuthenticationPrincipal Jwt authenticatedPrincipal) {
         return ResponseEntity.ok(CreditsResponse.builder().build());
     }
 

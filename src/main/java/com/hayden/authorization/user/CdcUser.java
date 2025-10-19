@@ -12,6 +12,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
+import java.time.Instant;
 import java.util.*;
 
 @Entity
@@ -56,7 +57,8 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     @Column
     private String password;
 
-    public record Credits(int current, int history) {}
+    @Builder
+    public record Credits(int current, int history, Instant lastUpdated) {}
 
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
