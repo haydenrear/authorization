@@ -73,9 +73,10 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-oauth2-authorization-server")
 
+    // Stripe Java SDK for webhook validation
+    implementation("com.stripe:stripe-java:25.0.0")
 }
 
 tasks.compileJava {
     dependsOn("processYmlFiles")
 }
-
