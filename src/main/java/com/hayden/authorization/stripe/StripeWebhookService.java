@@ -1,8 +1,5 @@
 package com.hayden.authorization.stripe;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.PaymentIntent;
@@ -12,17 +9,14 @@ import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.net.Webhook;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Predicate;
 
 /**
  * Service for validating and processing Stripe webhooks.
@@ -59,7 +53,7 @@ public class StripeWebhookService {
                         .build();
             }
 
-            var sig = getSignatures(sigHeader, Webhook.Signature.EXPECTED_SCHEME);
+            var sig = getSignatures(sigHeader);
 
             if (sig.stream().filter(Objects::nonNull).noneMatch(st -> Objects.equals(st, webhookSecret))) {
                 return PaymentData.builder()
@@ -126,9 +120,11 @@ public class StripeWebhookService {
         if (!pi.getCaptureMethod().startsWith("automatic")) {
             return PaymentData.builder()
                     .status(400)
+                    .success(false)
                     .errorMessage("Unknown capture method %s".formatted(pi.getCaptureMethod()))
                     .build();
         }
+
         var pd = PaymentData.builder()
                 .idempotentId(event.getRequest().getIdempotencyKey())
                 .sessionData(
@@ -140,24 +136,27 @@ public class StripeWebhookService {
                                 .address(address.orElse(null))
                                 .build()
                 )
-                .amountPaid(pi.getAmountReceived())
-                .errorMessage("Payment was cancelled");
+                .amountPaid(pi.getAmountReceived());
+
         return switch (event.getType()) {
-            case "payment_intent.payment_failed" ->
-                    pd.success(false)
-                            .status(200)
-                            .errorMessage("Payment seemed to fail.")
-                            .build();
             case "payment_intent.succeeded" ->
                     pd.success(true)
                             .status(200)
                             .build();
+            case "payment_intent.payment_failed" ->
+                    pd.success(false)
+                            .amountPaid(0L)
+                            .status(200)
+                            .errorMessage("Payment seemed to fail.")
+                            .build();
             case "payment_intent.canceled" ->
                     pd.success(false)
+                            .amountPaid(0L)
                             .errorMessage("Payment was cancelled")
                             .status(200)
                             .build();
             default -> pd.success(false)
+                    .amountPaid(0L)
                     .errorMessage("Unknown event type: %s"
                             .formatted(event.getType()))
                     .status(404)
@@ -177,13 +176,13 @@ public class StripeWebhookService {
         return (int) (amountCents * stripeConfig.getCreditsPerCent());
     }
 
-    private static List<String> getSignatures(String sigHeader, String scheme) {
+    private static List<String> getSignatures(String sigHeader) {
         List<String> signatures = new ArrayList<String>();
         String[] items = sigHeader.split(",", -1);
 
         for (String item : items) {
             String[] itemParts = item.split("=", 2);
-            if (itemParts[0].equals(scheme)) {
+            if (itemParts[0].equals(Webhook.Signature.EXPECTED_SCHEME)) {
                 signatures.add(itemParts[1]);
             }
         }
