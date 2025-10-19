@@ -1,5 +1,7 @@
 package com.hayden.authorization.user;
 
+import com.hayden.commitdiffmodel.stripe.PaymentData;
+
 import java.util.Optional;
 
 /**
@@ -28,7 +30,7 @@ public interface CdcUserRepositoryCustom {
     /**
      * Atomically increments the user's credits.
      * Uses database advisory locking to prevent race conditions.
-     *
+     * <p>
      * This operation:
      * 1. Acquires an advisory lock on the user
      * 2. Increments the user's credits by the specified amount
@@ -38,7 +40,8 @@ public interface CdcUserRepositoryCustom {
      *
      * @param userId the user ID (composite key)
      * @param amount the number of credits to add
+     * @param event
      * @return the new credit balance after incrementing
      */
-    int getAndIncrementCredits(CdcUser.CdcUserId userId, int amount);
+    int getAndIncrementCredits(CdcUser.CdcUserId userId, int amount, PaymentData event);
 }

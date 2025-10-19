@@ -2,6 +2,7 @@ package com.hayden.authorization.user;
 
 
 import com.hayden.persistence.models.AuditedEntity;
+import com.hayden.utilitymodule.stream.StreamUtil;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.extern.jackson.Jacksonized;
@@ -28,6 +29,11 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     @Id
     @org.springframework.data.annotation.Id
     CdcUserId principalId;
+
+    public boolean alreadyProcessed(String id) {
+        return StreamUtil.toStream(this.credits.paymentsProcessed)
+                .anyMatch(s -> Objects.equals(s, id));
+    }
 
     @Embeddable
     public record CdcUserId (String principalId, String clientId) {}

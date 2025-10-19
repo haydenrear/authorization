@@ -1,6 +1,6 @@
 package com.hayden.authorization.user;
 
-import jakarta.persistence.EntityManager;
+import com.hayden.commitdiffmodel.stripe.PaymentData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Optional;
 
 /**
@@ -76,7 +77,7 @@ public class CdcUserRepositoryImpl implements CdcUserRepositoryCustom {
      */
     @Override
     @Transactional(isolation = Isolation.SERIALIZABLE)
-    public int getAndIncrementCredits(CdcUser.CdcUserId userId, int amount) {
+    public int getAndIncrementCredits(CdcUser.CdcUserId userId, int amount, PaymentData event) {
         // Fetch the user within the transaction
         Optional<CdcUser> userOptional = userRepository.findById(userId);
 
@@ -86,7 +87,14 @@ public class CdcUserRepositoryImpl implements CdcUserRepositoryCustom {
         }
 
         CdcUser user = userOptional.get();
+
+        if (user.alreadyProcessed(event.idempotentId())) {
+            log.warn("User {} already processed: {}", userId, event.idempotentId());
+            return 0;
+        }
+
         CdcUser.Credits credits = user.getCredits();
+
 
         // Initialize credits if null
         if (credits == null) {
@@ -97,7 +105,9 @@ public class CdcUserRepositoryImpl implements CdcUserRepositoryCustom {
         // Increment credits
         int newBalance = credits.current() + amount;
         int newHistory = credits.history();
-        CdcUser.Credits updatedCredits = new CdcUser.Credits(newBalance, newHistory, Instant.now());
+        var p = new ArrayList<>(credits.paymentsProcessed());
+        p.add(event.idempotentId());
+        CdcUser.Credits updatedCredits = new CdcUser.Credits(newBalance, newHistory, Instant.now(), p);
         user.setCredits(updatedCredits);
 
         // Save the updated user - will be flushed at transaction end

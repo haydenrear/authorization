@@ -79,7 +79,7 @@ public class CreditsController {
         int creditsToAdd = stripeWebhookService.calculateCredits(amountCents);
 
         // Add credits to the user (atomically)
-        int newBalance = userRepository.getAndIncrementCredits(user.getPrincipalId(), creditsToAdd);
+        int newBalance = userRepository.getAndIncrementCredits(user.getPrincipalId(), creditsToAdd, event);
         
         log.info("Stripe webhook processed: User {} now has {} credits (added {})", 
                  user.getEmail(), newBalance, creditsToAdd);

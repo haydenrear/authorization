@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -71,75 +72,11 @@ public class StripeWebhookService {
             Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
 
             return Optional.ofNullable(event)
-                    .flatMap(evt -> {
-                        var d = Optional.ofNullable(evt.getDataObjectDeserializer());
-
-                        if (d.isEmpty())
-                            return Optional.empty();
-
-                        else {
-                            var g = d.get();
-                            var obj = g.getObject();
-                            return obj;
-                        }
-                    })
+                    .flatMap(evt -> Optional.ofNullable(evt.getDataObjectDeserializer())
+                            .flatMap(EventDataObjectDeserializer::getObject))
                     .map(so -> switch(so) {
-                        case PaymentIntent pi -> {
-                            var address = Optional.ofNullable(pi.getCustomerObject())
-                                    .flatMap(c -> Optional.ofNullable(c.getAddress()))
-                                            .or(() -> Optional.ofNullable(pi.getShipping()).flatMap(s -> Optional.ofNullable(s.getAddress())))
-                                    .map(add -> modelMapper.map(add, PaymentData.Address.class));
-                            var phone = Optional.ofNullable(pi.getCustomerObject())
-                                    .flatMap(c -> Optional.ofNullable(c.getPhone()))
-                                    .or(() -> Optional.ofNullable(pi.getShipping()).flatMap(s -> Optional.ofNullable(s.getPhone())));
-                            var name = Optional.ofNullable(pi.getCustomerObject())
-                                    .flatMap(c -> Optional.ofNullable(c.getName()))
-                                    .or(() -> Optional.ofNullable(pi.getShipping())
-                                            .flatMap(s -> Optional.ofNullable(s.getName())));
-                            var email = Optional.ofNullable(pi.getCustomerObject())
-                                    .flatMap(c -> Optional.ofNullable(c.getEmail()))
-                                    .or(() -> Optional.ofNullable(pi.getReceiptEmail()))
-                                    .or(() -> Optional.ofNullable(pi.getOnBehalfOfObject())
-                                            .flatMap(ac -> Optional.ofNullable(ac.getEmail())));
-                            var pd = PaymentData.builder()
-                                    .idempotentId(pi.getId())
-                                    .sessionData(
-                                            PaymentData.SessionData
-                                                    .builder()
-                                                    .name(name.orElse(null))
-                                                    .email(email.orElse(null))
-                                                    .ph(phone.orElse(null))
-                                                    .address(address.orElse(null))
-                                                    .build()
-                                    )
-                                    .amountPaid(pi.getAmountReceived())
-                                    .errorMessage("Payment was cancelled");
-                            yield switch(event.getType()) {
-                                case "payment_intent.payment_failed"  -> {
-                                    yield pd.success(false)
-                                            .status(200)
-                                            .errorMessage("Payment seemed to fail.")
-                                            .build();
-                                }
-                                case "payment_intent.succeeded" ->
-                                        pd.success(true)
-                                                .status(200)
-                                                .build();
-                                case "payment_intent.canceled"  ->
-                                        pd.success(false)
-                                                .errorMessage("Payment was cancelled")
-                                                .status(200)
-                                                .build();
-                                default ->
-                                        pd.success(false)
-                                                .errorMessage("Unknown event type: %s"
-                                                        .formatted(event.getType()))
-                                                .status(404)
-                                                .build();
-                            };
-                            // idempotency: check if event.getId() already processed in your DB
-                            // fulfill order / mark payment paid using pi.getId(), pi.getAmount(), pi.getMetadata(), etc.
-                        }
+                        case PaymentIntent pi ->
+                                parsePaymentIntent(pi, event);
                         default -> PaymentData.builder().success(false)
                                 .errorMessage("Unknown event type: %s"
                                         .formatted(event.getType()))
@@ -166,6 +103,69 @@ public class StripeWebhookService {
                     .success(false)
                     .build();
         }
+    }
+
+    private PaymentData parsePaymentIntent(PaymentIntent pi, Event event) {
+        var address = Optional.ofNullable(pi.getCustomerObject())
+                .flatMap(c -> Optional.ofNullable(c.getAddress()))
+                        .or(() -> Optional.ofNullable(pi.getShipping()).flatMap(s -> Optional.ofNullable(s.getAddress())))
+                .map(add -> modelMapper.map(add, PaymentData.Address.class));
+        var phone = Optional.ofNullable(pi.getCustomerObject())
+                .flatMap(c -> Optional.ofNullable(c.getPhone()))
+                .or(() -> Optional.ofNullable(pi.getShipping()).flatMap(s -> Optional.ofNullable(s.getPhone())));
+        var name = Optional.ofNullable(pi.getCustomerObject())
+                .flatMap(c -> Optional.ofNullable(c.getName()))
+                .or(() -> Optional.ofNullable(pi.getShipping())
+                        .flatMap(s -> Optional.ofNullable(s.getName())));
+        var email = Optional.ofNullable(pi.getCustomerObject())
+                .flatMap(c -> Optional.ofNullable(c.getEmail()))
+                .or(() -> Optional.ofNullable(pi.getReceiptEmail()))
+                .or(() -> Optional.ofNullable(pi.getOnBehalfOfObject())
+                        .flatMap(ac -> Optional.ofNullable(ac.getEmail())));
+
+        if (!pi.getCaptureMethod().startsWith("automatic")) {
+            return PaymentData.builder()
+                    .status(400)
+                    .errorMessage("Unknown capture method %s".formatted(pi.getCaptureMethod()))
+                    .build();
+        }
+        var pd = PaymentData.builder()
+                .idempotentId(event.getRequest().getIdempotencyKey())
+                .sessionData(
+                        PaymentData.SessionData
+                                .builder()
+                                .name(name.orElse(null))
+                                .email(email.orElse(null))
+                                .ph(phone.orElse(null))
+                                .address(address.orElse(null))
+                                .build()
+                )
+                .amountPaid(pi.getAmountReceived())
+                .errorMessage("Payment was cancelled");
+        return switch (event.getType()) {
+            case "payment_intent.payment_failed" -> {
+                return pd.success(false)
+                        .status(200)
+                        .errorMessage("Payment seemed to fail.")
+                        .build();
+            }
+            case "payment_intent.succeeded" ->
+                    pd.success(true)
+                            .status(200)
+                            .build();
+            case "payment_intent.canceled" ->
+                    pd.success(false)
+                            .errorMessage("Payment was cancelled")
+                            .status(200)
+                            .build();
+            default -> pd.success(false)
+                    .errorMessage("Unknown event type: %s"
+                            .formatted(event.getType()))
+                    .status(404)
+                    .build();
+        };
+        // idempotency: check if event.getId() already processed in your DB
+        // fulfill order / mark payment paid using pi.getId(), pi.getAmount(), pi.getMetadata(), etc.
     }
 
     /**
