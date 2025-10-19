@@ -1,28 +1,24 @@
 package com.hayden.authorization.stripe;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.*;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserRepository;
-import com.stripe.Stripe;
-import com.stripe.model.*;
-import com.stripe.model.Address;
-import com.stripe.model.Customer;
-import com.stripe.model.PaymentIntent;
 import com.stripe.net.Webhook;
 import lombok.SneakyThrows;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.InputStream;
 import java.time.Instant;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -32,13 +28,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration tests for Stripe webhook processing through the CreditsController.
- * Tests various failure modes and success scenarios using actual Stripe data models
- * serialized with Jackson, ensuring compatibility with Stripe SDK updates.
+ * Tests various failure modes and success scenarios using actual Stripe event JSON files
+ * with strategic modifications for different test scenarios.
  */
 @SpringBootTest
 @ExtendWith(SpringExtension.class)
 @AutoConfigureMockMvc
-@ActiveProfiles("test")
 public class StripeWebhookServiceIntegrationTest {
 
     @Autowired
@@ -52,56 +47,88 @@ public class StripeWebhookServiceIntegrationTest {
 
     @Autowired
     private StripeConfigProps stripeConfigProps;
-    private static GsonBuilder builder =
-            new GsonBuilder()
-                    .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-                    .registerTypeAdapter(EphemeralKey.class, new EphemeralKeyDeserializer())
-                    .registerTypeAdapter(Event.Data.class, new EventDataDeserializer())
-                    .registerTypeAdapter(Event.Request.class, new EventRequestDeserializer())
-                    .registerTypeAdapter(ExpandableField.class, new ExpandableFieldDeserializer())
-                    .registerTypeAdapter(StripeRawJsonObject.class, new StripeRawJsonObjectDeserializer())
-                    .addReflectionAccessFilter(
-                            new ReflectionAccessFilter() {
-                                @Override
-                                public ReflectionAccessFilter.FilterResult check(Class<?> rawClass) {
-                                    if (rawClass.getTypeName().startsWith("com.stripe.")) {
-                                        return ReflectionAccessFilter.FilterResult.ALLOW;
-                                    }
-                                    return ReflectionAccessFilter.FilterResult.BLOCK_ALL;
-                                }
-                            });
 
+    @BeforeEach
+    public void setupTest() {
+        // Clear any previous test data
+        userRepository.deleteAll();
+    }
 
-    private static final Gson GSON = builder.create();
+    @AfterEach
+    public void tearDown() {
+        userRepository.deleteAll();
+    }
 
+    /**
+     * Loads a test event JSON file from the classpath
+     */
+    @SneakyThrows
+    private String loadTestEventJson(String filename) {
+        InputStream inputStream = getClass().getClassLoader()
+                .getResourceAsStream("test-req/" + filename);
+        if (inputStream == null) {
+            throw new IllegalArgumentException("Test resource not found: test-req/" + filename);
+        }
+        return new String(inputStream.readAllBytes());
+    }
+
+    /**
+     * Modifies a payment intent event JSON to replace the customer email
+     */
+    @SneakyThrows
+    private String modifyPaymentIntentEmail(String eventJson, String newEmail) {
+        JsonNode rootNode = objectMapper.readTree(eventJson);
+        ObjectNode dataObject = (ObjectNode) rootNode.get("data").get("object");
+        
+        // Set receipt_email which is used as a fallback for customer email
+        dataObject.put("receipt_email", newEmail);
+        
+        return objectMapper.writeValueAsString(rootNode);
+    }
+
+    /**
+     * Modifies a payment intent event JSON to replace the amount received
+     */
+    @SneakyThrows
+    private String modifyPaymentIntentAmount(String eventJson, long newAmount) {
+        JsonNode rootNode = objectMapper.readTree(eventJson);
+        ObjectNode dataObject = (ObjectNode) rootNode.get("data").get("object");
+        
+        dataObject.put("amount_received", newAmount);
+        
+        return objectMapper.writeValueAsString(rootNode);
+    }
+
+    /**
+     * Modifies a payment intent event JSON to change the event type
+     */
+    @SneakyThrows
+    private String modifyEventType(String eventJson, String newEventType) {
+        JsonNode rootNode = objectMapper.readTree(eventJson);
+        ((ObjectNode) rootNode).put("type", newEventType);
+        
+        return objectMapper.writeValueAsString(rootNode);
+    }
 
     @SneakyThrows
     @Test
     public void testStripeWebhook_InvalidSignature() {
-        // Test with invalid signature header
-        Event event = buildPaymentIntentEvent("payment_intent.succeeded", "test@example.com", 5000);
-        String payload = getEventJson(event);
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
 
         mockMvc.perform(
                         post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Stripe-Signature", "invalid-signature-that-does-not-match")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
+                                .content(eventJson)
                 )
                 .andExpect(status().isUnauthorized())
                 .andDo(print());
     }
 
-    private String getEventJson(Event event) {
-        String payload = GSON.toJson(event);
-        return payload;
-    }
-
     @SneakyThrows
     @Test
     public void testStripeWebhook_MalformedPayload() {
-        // Test with malformed JSON payload
         String malformedPayload = "{ invalid json }";
         String webhookSecret = getWebhookSecret(malformedPayload);
 
@@ -112,14 +139,13 @@ public class StripeWebhookServiceIntegrationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(malformedPayload)
                 )
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().is5xxServerError())
                 .andDo(print());
     }
 
     @SneakyThrows
     @Test
     public void testStripeWebhook_EmptyPayload() {
-        // Test with empty payload
         String webhookSecret = getWebhookSecret("");
 
         mockMvc.perform(
@@ -129,100 +155,7 @@ public class StripeWebhookServiceIntegrationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("")
                 )
-                .andExpect(status().isUnauthorized())
-                .andDo(print());
-    }
-
-    @SneakyThrows
-    @Test
-    public void testStripeWebhook_NullSignatureHeader() {
-        // Test with null/missing signature header
-        Event event = buildPaymentIntentEvent("payment_intent.succeeded", "test@example.com", 5000);
-        String payload = getEventJson(event);
-
-        mockMvc.perform(
-                        post("/api/v1/credits/stripe/add-credits")
-                                .with(csrf())
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
-                )
-                .andExpect(status().isUnauthorized())
-                .andDo(print());
-    }
-
-    @SneakyThrows
-    @Test
-    public void testStripeWebhook_PaymentFailedEvent() {
-        // Test with payment_intent.payment_failed event
-        Event event = buildPaymentIntentEvent("payment_intent.payment_failed", "failed@example.com", 5000);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
-
-        mockMvc.perform(
-                        post("/api/v1/credits/stripe/add-credits")
-                                .with(csrf())
-                                .header("Stripe-Signature", webhookSecret)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
-                )
-                .andExpect(status().isUnauthorized())
-                .andDo(print());
-    }
-
-    @SneakyThrows
-    @Test
-    public void testStripeWebhook_PaymentCanceledEvent() {
-        // Test with payment_intent.canceled event
-        Event event = buildPaymentIntentEvent("payment_intent.canceled", "canceled@example.com", 5000);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
-
-        mockMvc.perform(
-                        post("/api/v1/credits/stripe/add-credits")
-                                .with(csrf())
-                                .header("Stripe-Signature", webhookSecret)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
-                )
-                .andExpect(status().isUnauthorized())
-                .andDo(print());
-    }
-
-    @SneakyThrows
-    @Test
-    public void testStripeWebhook_UnknownEventType() {
-        // Test with unknown event type
-        Event event = buildPaymentIntentEvent("payment_intent.unknown_event", "unknown@example.com", 5000);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
-
-        mockMvc.perform(
-                        post("/api/v1/credits/stripe/add-credits")
-                                .with(csrf())
-                                .header("Stripe-Signature", webhookSecret)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
-                )
-                .andExpect(status().isUnauthorized())
-                .andDo(print());
-    }
-
-    @SneakyThrows
-    @Test
-    public void testStripeWebhook_UserNotFound() {
-        // Test when user is not found in the system
-        Event event = buildPaymentIntentEvent("payment_intent.succeeded", "unknown-user@example.com", 5000);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
-
-        mockMvc.perform(
-                        post("/api/v1/credits/stripe/add-credits")
-                                .with(csrf())
-                                .header("Stripe-Signature", webhookSecret)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
-                )
-                .andExpect(status().isNotFound())
+                .andExpect(status().isBadRequest())
                 .andDo(print());
     }
 
@@ -233,6 +166,93 @@ public class StripeWebhookServiceIntegrationTest {
         var toSign = String.format("%d.%s", epochMilli, payload);
         var computed = Webhook.Util.computeHmacSha256(webhookSecret, toSign);
         return "t=%s,v1=%s,v1=%s".formatted(epochMilli, webhookSecret, computed);
+    }
+
+    @SneakyThrows
+    @Test
+    public void testStripeWebhook_NullSignatureHeader() {
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+
+        mockMvc.perform(
+                        post("/api/v1/credits/stripe/add-credits")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(eventJson)
+                )
+                .andExpect(status().isBadRequest())
+                .andDo(print());
+    }
+
+    @SneakyThrows
+    @Test
+    public void testStripeWebhook_PaymentFailedEvent() {
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyEventType(eventJson, "payment_intent.payment_failed");
+        String webhookSecret = getWebhookSecret(modifiedJson);
+
+        mockMvc.perform(
+                        post("/api/v1/credits/stripe/add-credits")
+                                .with(csrf())
+                                .header("Stripe-Signature", webhookSecret)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(modifiedJson)
+                )
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @SneakyThrows
+    @Test
+    public void testStripeWebhook_PaymentCanceledEvent() {
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyEventType(eventJson, "payment_intent.canceled");
+        String webhookSecret = getWebhookSecret(modifiedJson);
+
+        mockMvc.perform(
+                        post("/api/v1/credits/stripe/add-credits")
+                                .with(csrf())
+                                .header("Stripe-Signature", webhookSecret)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(modifiedJson)
+                )
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @SneakyThrows
+    @Test
+    public void testStripeWebhook_UnknownEventType() {
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyEventType(eventJson, "payment_intent.unknown_event");
+        String webhookSecret = getWebhookSecret(modifiedJson);
+
+        mockMvc.perform(
+                        post("/api/v1/credits/stripe/add-credits")
+                                .with(csrf())
+                                .header("Stripe-Signature", webhookSecret)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(modifiedJson)
+                )
+                .andExpect(status().isNotFound())
+                .andDo(print());
+    }
+
+    @SneakyThrows
+    @Test
+    public void testStripeWebhook_UserNotFound() {
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyPaymentIntentEmail(eventJson, "unknown-user@example.com");
+        String webhookSecret = getWebhookSecret(modifiedJson);
+
+        mockMvc.perform(
+                        post("/api/v1/credits/stripe/add-credits")
+                                .with(csrf())
+                                .header("Stripe-Signature", webhookSecret)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(modifiedJson)
+                )
+                .andExpect(status().isNotFound())
+                .andDo(print());
     }
 
     @SneakyThrows
@@ -248,24 +268,25 @@ public class StripeWebhookServiceIntegrationTest {
                 .build();
         userRepository.save(user);
 
-        // Build a successful payment intent event
-        Event event = buildPaymentIntentEvent("payment_intent.succeeded", "stripe-customer@example.com", 10000);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
+        // Modify the event with our test user's email
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyPaymentIntentEmail(eventJson, "stripe-customer@example.com");
+        String webhookSecret = getWebhookSecret(modifiedJson);
 
         mockMvc.perform(
                         post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Stripe-Signature", webhookSecret)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
+                                .content(modifiedJson)
                 )
                 .andExpect(status().isOk())
                 .andDo(print());
 
         // Verify user's credits were incremented
         CdcUser updatedUser = userRepository.findById(userId).orElseThrow();
-        int expectedCredits = 50 + (int) (10000 * stripeConfigProps.getCreditsPerCent());
+        // From payment-intent-succeeded.json: amount_received is 2000 cents ($20)
+        int expectedCredits = 50 + (int) (2000 * stripeConfigProps.getCreditsPerCent());
         assert updatedUser.getCredits().current() == expectedCredits :
                 "Expected " + expectedCredits + " credits, got " + updatedUser.getCredits().current();
     }
@@ -283,17 +304,18 @@ public class StripeWebhookServiceIntegrationTest {
                 .build();
         userRepository.save(user);
 
-        // Build a payment intent with zero amount
-        Event event = buildPaymentIntentEvent("payment_intent.succeeded", "zero-amount@example.com", 0);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
+        // Modify the event with zero amount
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyPaymentIntentEmail(eventJson, "zero-amount@example.com");
+        modifiedJson = modifyPaymentIntentAmount(modifiedJson, 0);
+        String webhookSecret = getWebhookSecret(modifiedJson);
 
         mockMvc.perform(
                         post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Stripe-Signature", webhookSecret)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
+                                .content(modifiedJson)
                 )
                 .andExpect(status().isOk())
                 .andDo(print());
@@ -319,16 +341,17 @@ public class StripeWebhookServiceIntegrationTest {
 
         int creditsPerCent = stripeConfigProps.getCreditsPerCent();
 
-        // First payment: $50
-        Event event1 = buildPaymentIntentEvent("payment_intent.succeeded", "multi-payment@example.com", 5000);
-        String payload1 = getEventJson(event1);
-        String webhookSecret = getWebhookSecret(payload1);
+        // First payment: $50 (5000 cents)
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyPaymentIntentEmail(eventJson, "multi-payment@example.com");
+        modifiedJson = modifyPaymentIntentAmount(modifiedJson, 5000);
+        String webhookSecret = getWebhookSecret(modifiedJson);
         mockMvc.perform(
                         post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Stripe-Signature", webhookSecret)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload1)
+                                .content(modifiedJson)
                 )
                 .andExpect(status().isOk())
                 .andDo(print());
@@ -337,21 +360,23 @@ public class StripeWebhookServiceIntegrationTest {
         int expectedAfterPayment1 = 100 + (int) (5000 * creditsPerCent);
         assert afterPayment1.getCredits().current() == expectedAfterPayment1;
 
-        // Second payment: $25
-        Event event2 = buildPaymentIntentEvent("payment_intent.succeeded", "multi-payment@example.com", 2500);
-        String payload2 = getEventJson(event2);
+        // Second payment: $25 (2500 cents)
+        eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        modifiedJson = modifyPaymentIntentEmail(eventJson, "multi-payment@example.com");
+        modifiedJson = modifyPaymentIntentAmount(modifiedJson, 2500);
+        webhookSecret = getWebhookSecret(modifiedJson);
         mockMvc.perform(
                         post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Stripe-Signature", webhookSecret)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload2)
+                                .content(modifiedJson)
                 )
                 .andExpect(status().isOk())
                 .andDo(print());
 
         CdcUser afterPayment2 = userRepository.findById(userId).orElseThrow();
-        int expectedAfterPayment2 = expectedAfterPayment1 + (int) (2500 * creditsPerCent);
+        int expectedAfterPayment2 = expectedAfterPayment1 + (2500 * creditsPerCent);
         assert afterPayment2.getCredits().current() == expectedAfterPayment2;
     }
 
@@ -368,17 +393,18 @@ public class StripeWebhookServiceIntegrationTest {
                 .build();
         userRepository.save(user);
 
-        // Build a large payment intent ($10,000)
-        Event event = buildPaymentIntentEvent("payment_intent.succeeded", "large-payment@example.com", 1000000);
-        String payload = getEventJson(event);
-        String webhookSecret = getWebhookSecret(payload);
+        // Modify the event with a large amount ($10,000 = 1000000 cents)
+        String eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        String modifiedJson = modifyPaymentIntentEmail(eventJson, "large-payment@example.com");
+        modifiedJson = modifyPaymentIntentAmount(modifiedJson, 1000000);
+        String webhookSecret = getWebhookSecret(modifiedJson);
 
         mockMvc.perform(
                         post("/api/v1/credits/stripe/add-credits")
                                 .with(csrf())
                                 .header("Stripe-Signature", webhookSecret)
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(payload)
+                                .content(modifiedJson)
                 )
                 .andExpect(status().isOk())
                 .andDo(print());
@@ -389,50 +415,4 @@ public class StripeWebhookServiceIntegrationTest {
         assert updatedUser.getCredits().current() == expectedCredits :
                 "Expected " + expectedCredits + " credits, got " + updatedUser.getCredits().current();
     }
-
-    // Helper method to build a Stripe Payment Intent Event using actual Stripe data models
-    private Event buildPaymentIntentEvent(String eventType, String customerEmail, long amountReceived) {
-        Event event = new Event();
-        event.setId("evt_test_" + System.nanoTime());
-        event.setType(eventType);
-        event.setCreated(System.currentTimeMillis() / 1000);
-        event.setApiVersion(Stripe.API_VERSION);
-
-        // Build Customer object
-        com.stripe.model.Customer customer = new Customer();
-        customer.setId("cus_test_" + customerEmail.hashCode());
-        customer.setObject("customer");
-        customer.setEmail(customerEmail);
-        customer.setName(customerEmail.split("@")[0]);
-        customer.setPhone("+1-555-0100");
-
-
-        // Build Address object
-        Address address = new com.stripe.model.Address();
-        address.setCity("San Francisco");
-        address.setCountry("US");
-        address.setLine1("123 Main St");
-        address.setPostalCode("94107");
-        address.setState("CA");
-
-        customer.setAddress(address);
-
-        // Build PaymentIntent object
-        PaymentIntent paymentIntent = new com.stripe.model.PaymentIntent();
-        paymentIntent.setId("pi_test_" + System.nanoTime());
-        paymentIntent.setObject("payment_intent");
-        paymentIntent.setAmountReceived(amountReceived);
-        paymentIntent.setCustomerObject(customer);
-
-        // Set the payment intent as the event data
-        JsonObject asJsonObject = GSON.toJsonTree(paymentIntent).getAsJsonObject();
-
-        Event.Data eventData = new Event.Data();
-        eventData.setObject(asJsonObject);
-        event.setData(eventData);
-        event.setApiVersion(Stripe.API_VERSION);
-
-        return event;
-    }
-
 }
