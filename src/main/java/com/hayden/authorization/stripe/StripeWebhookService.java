@@ -143,12 +143,11 @@ public class StripeWebhookService {
                 .amountPaid(pi.getAmountReceived())
                 .errorMessage("Payment was cancelled");
         return switch (event.getType()) {
-            case "payment_intent.payment_failed" -> {
-                return pd.success(false)
-                        .status(200)
-                        .errorMessage("Payment seemed to fail.")
-                        .build();
-            }
+            case "payment_intent.payment_failed" ->
+                    pd.success(false)
+                            .status(200)
+                            .errorMessage("Payment seemed to fail.")
+                            .build();
             case "payment_intent.succeeded" ->
                     pd.success(true)
                             .status(200)
