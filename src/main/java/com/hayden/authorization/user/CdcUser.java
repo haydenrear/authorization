@@ -57,8 +57,12 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     @Column
     private String password;
 
-    @Builder
-    public record Credits(int current, int history, Instant lastUpdated) {}
+    @Builder(toBuilder = true)
+    public record Credits(int current, int history, Instant lastUpdated, List<String> paymentsProcessed) {
+        public Credits(int current, int history, Instant lastUpdated) {
+            this(current, history, lastUpdated, new ArrayList<>());
+        }
+    }
 
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)

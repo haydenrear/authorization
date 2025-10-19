@@ -3,12 +3,14 @@ package com.hayden.authorization.credits;
 import com.hayden.authorization.stripe.StripeWebhookService;
 import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserRepository;
+import com.hayden.authorization.user.QCdcUser;
 import com.hayden.commitdiffmodel.credits.CreditsResponse;
 import com.hayden.commitdiffmodel.credits.GetAndDecrementCreditsRequest;
 import com.hayden.commitdiffmodel.stripe.StripeCheckoutSession;
-import com.hayden.commitdiffmodel.stripe.StripeWebhookEvent;
+import com.hayden.commitdiffmodel.stripe.PaymentData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.repository.query.FluentQuery;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/credits")
@@ -34,54 +37,45 @@ public class CreditsController {
     @PostMapping("/stripe/add-credits")
     public ResponseEntity<Void> handleStripeWebhook(@RequestHeader("Stripe-Signature") String sigHeader,
                                                      @RequestBody String payload) {
-        // Validate and parse the webhook
-        Optional<StripeWebhookEvent> eventOpt = stripeWebhookService.validateAndParseWebhook(payload, sigHeader);
+        PaymentData event = stripeWebhookService.validateAndParseWebhook(payload, sigHeader);
         
-        if (eventOpt.isEmpty()) {
+        if (event.isFailure()) {
             log.warn("Invalid or unverifiable Stripe webhook received");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        StripeWebhookEvent event = eventOpt.get();
-
-        // Check if this is a payment success event
-        if (!stripeWebhookService.isPaymentSuccessEvent(event)) {
-            log.debug("Ignoring non-payment event: {}", event.getType());
-            return ResponseEntity.ok().build();
-        }
-
-        // Extract checkout session from the event
-        Optional<StripeCheckoutSession> sessionOpt = stripeWebhookService.extractCheckoutSession(event);
-        
-        if (sessionOpt.isEmpty()) {
+        if (event.sessionData() == null) {
             log.warn("Could not extract checkout session from webhook event");
             return ResponseEntity.badRequest().build();
         }
 
-        StripeCheckoutSession session = sessionOpt.get();
-
-        // Get customer email from the session
-        String customerEmail = session.getCustomerEmail();
-        if (customerEmail == null || customerEmail.isEmpty()) {
-            log.warn("Stripe session has no customer email");
-            return ResponseEntity.badRequest().build();
-        }
+        PaymentData.SessionData session = event.sessionData();
 
         // Find the user by email
-        Optional<CdcUser> userOpt = userRepository.findAll()
-                .stream()
-                .filter(u -> customerEmail.equals(u.getEmail()))
-                .findFirst();
+        String email = session.email();
+        String name = session.name();
+
+        if (email == null)
+            email = UUID.randomUUID().toString();
+        if (name == null)
+            name = UUID.randomUUID().toString();
+
+        Optional<CdcUser> userOpt = userRepository.findBy(
+                QCdcUser.cdcUser.email.eq(email)
+                        .or(QCdcUser.cdcUser.email.eq(name))
+                        .or(QCdcUser.cdcUser.principalId.principalId.eq(name))
+                        .or(QCdcUser.cdcUser.principalId.principalId.eq(email)),
+                FluentQuery.FetchableFluentQuery::one);
 
         if (userOpt.isEmpty()) {
-            log.warn("User not found for email: {}", customerEmail);
+            log.warn("User not found for email: {}", email);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         CdcUser user = userOpt.get();
         
         // Calculate credits to add based on the amount paid
-        long amountCents = session.getAmountTotal() != null ? session.getAmountTotal() : 0;
+        long amountCents = event.amountPaid();
         int creditsToAdd = stripeWebhookService.calculateCredits(amountCents);
 
         // Add credits to the user (atomically)

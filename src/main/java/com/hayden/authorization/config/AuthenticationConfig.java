@@ -4,6 +4,7 @@ import com.hayden.authorization.user.CdcUserDetails;
 import com.hayden.authorization.user.CdcUserDetailsManager;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.jdbc.init.DataSourceScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.DatabaseInitializationMode;
@@ -68,6 +69,11 @@ public class AuthenticationConfig {
     @Bean
     PasswordEncoder passwordEncoder() {
         return NoOpPasswordEncoder.getInstance();
+    }
+
+    @Bean
+    ModelMapper modelMapper() {
+        return new ModelMapper();
     }
 
     private static void insertUser(CdcUserDetailsManager mgr) {
