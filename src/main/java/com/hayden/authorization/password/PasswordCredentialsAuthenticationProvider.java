@@ -1,5 +1,7 @@
 package com.hayden.authorization.password;
 
+import com.hayden.authorization.oauth2.SocialRegistrationOAuth2UserService;
+import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -75,7 +78,7 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.UNAUTHORIZED_CLIENT);
         }
 
-        Set<String> authorizedScopes = Collections.emptySet();
+        Set<String> authorizedScopes = new HashSet<>();
         if (!CollectionUtils.isEmpty(clientCredentialsAuthentication.getScopes())) {
             for (String requestedScope : clientCredentialsAuthentication.getScopes()) {
                 if (!registeredClient.getScopes().contains(requestedScope)) {
@@ -90,6 +93,8 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
             this.logger.trace("Validated token request parameters");
         }
 
+        authorizedScopes.addAll(SocialRegistrationSuccessHandler.AUTHORIZED_SCOPES);
+
         // @formatter:off
         OAuth2TokenContext tokenContext = DefaultOAuth2TokenContext.builder()
                 .registeredClient(registeredClient)
@@ -103,6 +108,7 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
         // @formatter:on
 
         OAuth2Token generatedAccessToken = this.tokenGenerator.generate(tokenContext);
+
         if (generatedAccessToken == null) {
             OAuth2Error error = new OAuth2Error(OAuth2ErrorCodes.SERVER_ERROR,
                     "The token generator failed to generate the access token.", ERROR_URI);

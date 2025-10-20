@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContext;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
@@ -87,47 +88,10 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
             Optional.ofNullable(generated)
                     .flatMap(j -> Optional.ofNullable(j.getTokenValue()))
                     .ifPresentOrElse(
-                            t -> {
-                                try {
-                                    user.setJwtToken(t);
-                                    cdcUserRepository.save(user);
-                                    OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER,
-                                            t,
-                                            generated.getIssuedAt(),
-                                            generated.getExpiresAt(),
-                                            tokenContext.getAuthorizedScopes());
-
-                                    var idToken = new OidcIdToken(
-                                            accessToken.getTokenValue(),
-                                            accessToken.getIssuedAt(),
-                                            accessToken.getExpiresAt(),
-                                            Map.of("email", user.getEmail()));
-
-                                    OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
-                                            .withRegisteredClient(found)
-                                            .principalName(user.getName())
-                                            .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                                            .authorizedScopes(AUTHORIZED_SCOPES);
-
-                                    authorizationBuilder.token(idToken,
-                                            (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, idToken.getClaims()));
-
-                                    authorizationBuilder.token(accessToken, (metadata) ->
-                                            metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, generated.getClaims()));
-
-                                    OAuth2Authorization authorization = authorizationBuilder.build();
-
-                                    authorizationService.save(authorization);
-                                    response.sendRedirect("/?token=%s".formatted(generated.getTokenValue()));
-                                } catch (
-                                        IOException e) {
-                                    log.error("Error writing response: {}.", e.getMessage(), e);
-                                }
-                            },
+                            t -> handleAuthorizationCode(response, user, t, generated, tokenContext, found),
                             () -> {
                                 try {
-                                    response.getWriter()
-                                            .write("Authentication failure. No API key issued.");
+                                    response.sendRedirect("/");
                                 } catch (
                                         IOException e) {
                                     log.error("Error writing response: {}.", e.getMessage(), e);
@@ -137,6 +101,44 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
         } else {
             response.getWriter()
                     .write("Authentication failed.");
+        }
+    }
+
+    private void handleAuthorizationCode(HttpServletResponse response, CdcUser user, String t, Jwt generated, OAuth2TokenContext tokenContext, RegisteredClient found) {
+        try {
+            user.setJwtToken(t);
+            cdcUserRepository.save(user);
+            OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER,
+                    t,
+                    generated.getIssuedAt(),
+                    generated.getExpiresAt(),
+                    tokenContext.getAuthorizedScopes());
+
+            var idToken = new OidcIdToken(
+                    accessToken.getTokenValue(),
+                    accessToken.getIssuedAt(),
+                    accessToken.getExpiresAt(),
+                    Map.of("email", user.getEmail()));
+
+            OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
+                    .withRegisteredClient(found)
+                    .principalName(user.getName())
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                    .authorizedScopes(AUTHORIZED_SCOPES);
+
+            authorizationBuilder.token(idToken,
+                    (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, idToken.getClaims()));
+
+            authorizationBuilder.token(accessToken, (metadata) ->
+                    metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, generated.getClaims()));
+
+            OAuth2Authorization authorization = authorizationBuilder.build();
+
+            authorizationService.save(authorization);
+            response.sendRedirect("/?token=%s".formatted(generated.getTokenValue()));
+        } catch (
+                IOException e) {
+            log.error("Error writing response: {}.", e.getMessage(), e);
         }
     }
 }
