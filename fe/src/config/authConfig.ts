@@ -7,7 +7,7 @@ export const authConfig = {
   oauth2: {
     tokenEndpoint: '/oauth2/token',
     revokeEndpoint: '/oauth2/revoke',
-    userinfoEndpoint: '/oauth2/userinfo',
+    userinfoEndpoint: '/userinfo',
   },
 
   // Custom API endpoints (if your auth server provides them)

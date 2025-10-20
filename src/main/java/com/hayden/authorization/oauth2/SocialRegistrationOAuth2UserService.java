@@ -41,7 +41,6 @@ public class SocialRegistrationOAuth2UserService implements OAuth2UserService<OA
     public OAuth2User loadUser(OAuth2UserRequest req) throws OAuth2AuthenticationException {
         OAuth2User remote = delegate.loadUser(req);
         var email = tryGetEmail(req, remote);
-        email.ifPresent(u -> remote.getAttributes().put("email", u));
         String provider = req.getClientRegistration()
                              .getRegistrationId();
         String externalId = remote.getName();

@@ -1,5 +1,6 @@
 package com.hayden.authorization.oauth2;
 
+import com.google.common.collect.Sets;
 import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserRepository;
 import jakarta.servlet.ServletException;
@@ -11,6 +12,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
@@ -26,14 +29,15 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.Serial;
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Optional;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHandler {
+    public static final HashSet<String> AUTHORIZED_SCOPES = Sets.newHashSet("openid", "user", "user:email", "read:user", "profile", "address", "phone", "email");
     private final OAuth2AuthorizationService authorizationService;
     private final CdcUserRepository cdcUserRepository;
     private final RegisteredClientRepository registeredClientRepository;
@@ -47,26 +51,28 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
 //                                 create a jwt token from this oauth2 authentication token with our key
             var found = registeredClientRepository.findById("cdc");
 
-            OAuth2TokenContext tokenContext = DefaultOAuth2TokenContext.builder()
-                                                                       .registeredClient(found)
-                                                                       .principal(authentication)
-                                                                       .context(a -> a.putAll(user.getAttributes()))
-                                                                       .authorizationServerContext(new AuthorizationServerContext() {
-                                                                           @Override
-                                                                           public String getIssuer() {
-                                                                               return "localhost:8080";
-                                                                           }
+            OAuth2TokenContext tokenContext = DefaultOAuth2TokenContext
+                    .builder()
+                    .registeredClient(found)
+                    .principal(authentication)
+                    .context(a -> a.putAll(user.getAttributes()))
+                    .authorizationServerContext(new AuthorizationServerContext() {
+                        @Override
+                        public String getIssuer() {
+                            return getAuthorizationServerSettings().getIssuer();
+                        }
 
-                                                                           @Override
-                                                                           public AuthorizationServerSettings getAuthorizationServerSettings() {
-                                                                               return AuthorizationServerSettings.builder().build();
-                                                                           }
-                                                                       })
-                                                                       .authorizedScopes(new HashSet<>())
-                                                                       .tokenType(OAuth2TokenType.ACCESS_TOKEN)
-                                                                       .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                                                                       .authorizationGrant(auth)
-                                                                       .build();
+                        @Override
+                        public AuthorizationServerSettings getAuthorizationServerSettings() {
+                            return AuthorizationServerSettings.builder()
+                                    .build();
+                        }
+                    })
+                    .authorizedScopes(Sets.newHashSet(AUTHORIZED_SCOPES))
+                    .tokenType(OAuth2TokenType.ACCESS_TOKEN)
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                    .authorizationGrant(auth)
+                    .build();
 
             var generator = new JwtGenerator(jwtEncoder);
             generator.setJwtCustomizer(context -> user.getAttributes()
@@ -88,12 +94,23 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
                                     OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER,
                                             t,
                                             generated.getIssuedAt(),
-                                            generated.getExpiresAt(), tokenContext.getAuthorizedScopes());
+                                            generated.getExpiresAt(),
+                                            tokenContext.getAuthorizedScopes());
 
-                                    OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization.withRegisteredClient(found)
-                                                                                                          .principalName(user.getName())
-                                                                                                          .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                                                                                                          .authorizedScopes(new HashSet<>());
+                                    var idToken = new OidcIdToken(
+                                            accessToken.getTokenValue(),
+                                            accessToken.getIssuedAt(),
+                                            accessToken.getExpiresAt(),
+                                            Map.of("email", user.getEmail()));
+
+                                    OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
+                                            .withRegisteredClient(found)
+                                            .principalName(user.getName())
+                                            .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                                            .authorizedScopes(AUTHORIZED_SCOPES);
+
+                                    authorizationBuilder.token(idToken,
+                                            (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, idToken.getClaims()));
 
                                     authorizationBuilder.token(accessToken, (metadata) ->
                                             metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, generated.getClaims()));
@@ -101,8 +118,7 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
                                     OAuth2Authorization authorization = authorizationBuilder.build();
 
                                     authorizationService.save(authorization);
-                                    response.getWriter()
-                                            .write("Authentication successful. Here is your API key: %s".formatted(t));
+                                    response.sendRedirect("/?token=%s".formatted(generated.getTokenValue()));
                                 } catch (
                                         IOException e) {
                                     log.error("Error writing response: {}.", e.getMessage(), e);

@@ -54,7 +54,7 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     @Column
     private String authorizationCode;
 
-    @Column(length = 2048)
+    @Column(length = 4096)
     private String jwtToken;
 
     /**

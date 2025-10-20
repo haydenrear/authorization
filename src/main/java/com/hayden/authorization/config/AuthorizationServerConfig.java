@@ -91,7 +91,7 @@ public class AuthorizationServerConfig {
             throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-            .oidc(Customizer.withDefaults());    // Enable OpenID Connect 1.0
+            .oidc(Customizer.withDefaults());
         http
                 // Redirect to the login page when not authenticated from the
                 // authorization endpoint
@@ -114,7 +114,11 @@ public class AuthorizationServerConfig {
                                                    OAuth2AuthorizedClientRepository authorizedClientRepository,
                                                    SocialRegistrationSuccessHandler socialRegistrationSuccessHandler)
             throws Exception {
-        http.authorizeHttpRequests((authorize) -> authorize
+        http
+                .with(OAuth2AuthorizationServerConfigurer.authorizationServer(), auth -> {
+                    auth.oidc(Customizer.withDefaults());
+                })
+                .authorizeHttpRequests((authorize) -> authorize
                         .requestMatchers("/api/v1/credits/stripe/**")
                         .permitAll()
                         .anyRequest()
@@ -127,7 +131,8 @@ public class AuthorizationServerConfig {
                                        .authorizedClientRepository(authorizedClientRepository))
                 .httpBasic(Customizer.withDefaults())
                 .csrf(CsrfConfigurer::disable)
-                .formLogin(Customizer.withDefaults());
+                .formLogin(Customizer.withDefaults())
+        ;
 
         return http.build();
     }
