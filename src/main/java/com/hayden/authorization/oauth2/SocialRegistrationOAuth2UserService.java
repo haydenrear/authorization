@@ -45,7 +45,7 @@ public class SocialRegistrationOAuth2UserService implements OAuth2UserService<OA
                              .getRegistrationId();
         String externalId = remote.getName();
         var accessToken = req.getAccessToken()
-                             .getTokenValue();
+                .getTokenValue();
         CdcUser.CdcUserId userId = new CdcUser.CdcUserId(externalId, provider);
         var createUpdate = cdcUserRepository.findById(userId)
                                             .map(user -> {

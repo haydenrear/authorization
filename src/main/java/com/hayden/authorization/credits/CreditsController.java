@@ -98,14 +98,13 @@ public class CreditsController {
 
         // Extract user ID from JWT
         String principalId = authenticatedPrincipal.getSubject();
-        String clientId = authenticatedPrincipal.getClaimAsString("client_id");
-        
-        if (principalId == null || clientId == null) {
-            log.warn("JWT missing required claims: sub or client_id");
+
+        if (principalId == null) {
+            log.warn("JWT missing required claims: client_id");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, clientId);
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, "github");
         
         // Fetch the user
         Optional<CdcUser> userOpt = userRepository.findById(userId);

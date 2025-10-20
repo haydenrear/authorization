@@ -27,6 +27,10 @@ spring:
               - user:email
               - read:user
         provider:
+          github:
+            authorization-uri: http://localhost:8081/oauth2/authorize
+            token-uri:         http://localhost:8081/login/oauth/access_token
+            user-info-uri:     http://localhost:8081/userinfo
           cdc:
             authorization-uri: http://localhost:8080/oauth2/authorize
             token-uri:         http://localhost:8080/oauth2/token
@@ -80,3 +84,6 @@ management:
 keystore:
   key-path: {{PROJ_DIR}}/keys
   key-name: cdc-key
+
+logging.level.org.springframework.security.oauth2.client: DEBUG
+logging.level.org.springframework.security.oauth2.server: DEBUG

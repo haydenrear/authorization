@@ -12,6 +12,7 @@ plugins {
     id("com.hayden.paths")
     id("com.hayden.docker")
     id("com.github.node-gradle.node")
+    id("com.hayden.wiremock")
 }
 
 val registryBase = project.property("registryBase") ?: "localhost:5001"
