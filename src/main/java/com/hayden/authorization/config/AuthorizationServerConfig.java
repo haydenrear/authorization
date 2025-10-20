@@ -3,6 +3,7 @@ package com.hayden.authorization.config;
 import com.google.common.collect.Lists;
 import com.hayden.authorization.client_credentials.ClientCredentialsParentExtractor;
 import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
+import com.hayden.authorization.oidc.UserEndpointUserInfoMapper;
 import com.hayden.authorization.password.PasswordCredentialsAuthenticationProvider;
 import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationConverter;
 import com.hayden.commitdiffmodel.config.DisableGraphQl;
@@ -54,6 +55,8 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.oidc.authentication.OidcUserInfoAuthenticationProvider;
+import org.springframework.security.oauth2.server.authorization.oidc.web.OidcUserInfoEndpointFilter;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
@@ -92,18 +95,24 @@ public class AuthorizationServerConfig {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
             .oidc(Customizer.withDefaults());
+//        TODO: this should have the login screen and other should have the oauth2 endpoint
         http
-                // Redirect to the login page when not authenticated from the
-                // authorization endpoint
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML))
                 )
-                // Accept access tokens for User Info and/or Client Registration
                 .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()));
 
         return http.build();
+    }
+
+    @Bean
+    OidcUserInfoAuthenticationProvider oidcUserInfoAuthenticationProvider(OAuth2AuthorizationService authorizationService,
+                                                                          UserEndpointUserInfoMapper mapper) {
+        OidcUserInfoAuthenticationProvider provider = new OidcUserInfoAuthenticationProvider(authorizationService);
+        provider.setUserInfoMapper(mapper);
+        return provider;
     }
 
 
@@ -112,27 +121,31 @@ public class AuthorizationServerConfig {
     SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                    OAuth2AuthorizedClientService authorizationClientService,
                                                    OAuth2AuthorizedClientRepository authorizedClientRepository,
-                                                   SocialRegistrationSuccessHandler socialRegistrationSuccessHandler)
+                                                   SocialRegistrationSuccessHandler socialRegistrationSuccessHandler,
+                                                   OidcUserInfoAuthenticationProvider provider)
             throws Exception {
         http
-                .with(OAuth2AuthorizationServerConfigurer.authorizationServer(), auth -> {
-                    auth.oidc(Customizer.withDefaults());
-                })
+                .with(
+                        OAuth2AuthorizationServerConfigurer.authorizationServer(),
+                        auth -> {
+                            auth.oidc(oidcConfigurer -> oidcConfigurer
+                                    .userInfoEndpoint(userInfo -> {
+                                        userInfo.authenticationProvider(provider);
+                                    }));
+                        })
                 .authorizeHttpRequests((authorize) -> authorize
                         .requestMatchers("/api/v1/credits/stripe/**")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
                 )
-                .oauth2ResourceServer((resourceServer) -> resourceServer
-                        .jwt(Customizer.withDefaults()))
+                .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()))
                 .oauth2Login(login -> login.successHandler(socialRegistrationSuccessHandler)
                                        .authorizedClientService(authorizationClientService)
                                        .authorizedClientRepository(authorizedClientRepository))
                 .httpBasic(Customizer.withDefaults())
                 .csrf(CsrfConfigurer::disable)
-                .formLogin(Customizer.withDefaults())
-        ;
+                .formLogin(Customizer.withDefaults());
 
         return http.build();
     }
@@ -163,10 +176,12 @@ public class AuthorizationServerConfig {
         return j;
     }
 
+
     @Bean
     BeanPostProcessor oAuth2ClientAuthenticationFilterProcessor(PasswordCredentialsAuthenticationProvider passwordCredentialsAuthenticationProvider,
                                                                 OAuth2X509AuthenticationProvider x509AuthenticationProvider,
-                                                                AuthenticationConverter authenticationConverterPassword) {
+                                                                AuthenticationConverter authenticationConverterPassword,
+                                                                OidcUserInfoAuthenticationProvider authenticationProvider) {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
@@ -179,6 +194,9 @@ public class AuthorizationServerConfig {
                     case ProviderManager p -> {
                         addProviderAsFirst(p, passwordCredentialsAuthenticationProvider);
                         addProviderAsFirst(p, x509AuthenticationProvider);
+
+                        p.getProviders().removeIf(aut -> aut.getClass().equals(OidcUserInfoAuthenticationProvider.class));
+                        p.getProviders().add(authenticationProvider);
                     }
                     default -> {
                     }

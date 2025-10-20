@@ -3,6 +3,7 @@ package com.hayden.authorization.config;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.hayden.authorization.user.CdcUserDetails;
 import com.hayden.authorization.user.CdcUserDetailsManager;
+import com.hayden.authorization.user.CdcUserRepository;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
@@ -47,8 +48,10 @@ public class AuthenticationConfig {
     @Bean
     @Profile("test-auth")
     public CommandLineRunner initializeAuth(DataSource dataSource,
-                                            CdcUserDetailsManager userDetailsService) {
+                                            CdcUserDetailsManager userDetailsService,
+                                            CdcUserRepository userRepository) {
         initializeDatabase(dataSource);
+        userRepository.deleteAll();
         insertUser(userDetailsService);
         return args -> {};
     }

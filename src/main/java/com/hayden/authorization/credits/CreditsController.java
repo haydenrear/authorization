@@ -60,19 +60,23 @@ public class CreditsController {
         if (name == null)
             name = UUID.randomUUID().toString();
 
-        Optional<CdcUser> userOpt = userRepository.findBy(
+        var userOpt = userRepository.findBy(
                 QCdcUser.cdcUser.email.eq(email)
                         .or(QCdcUser.cdcUser.email.eq(name))
                         .or(QCdcUser.cdcUser.principalId.principalId.eq(name))
                         .or(QCdcUser.cdcUser.principalId.principalId.eq(email)),
-                FluentQuery.FetchableFluentQuery::one);
+                FluentQuery.FetchableFluentQuery::all);
 
         if (userOpt.isEmpty()) {
             log.warn("User not found for email: {}", email);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-        CdcUser user = userOpt.get();
+        if (userOpt.size() > 1) {
+            log.warn("Multiple users found for email: {} - not set up currently.", email);
+        }
+
+        CdcUser user = userOpt.getFirst();
         
         // Calculate credits to add based on the amount paid
         long amountCents = event.amountPaid();
@@ -104,7 +108,7 @@ public class CreditsController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, "github");
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, "cdc");
         
         // Fetch the user
         Optional<CdcUser> userOpt = userRepository.findById(userId);

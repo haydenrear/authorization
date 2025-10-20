@@ -14,7 +14,7 @@ public class CdcUserDetails implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return cdcUserRepository.findById(new CdcUser.CdcUserId(username, "github"))
+        return cdcUserRepository.findById(new CdcUser.CdcUserId(username, "cdc"))
                                 .orElse(null);
 
     }

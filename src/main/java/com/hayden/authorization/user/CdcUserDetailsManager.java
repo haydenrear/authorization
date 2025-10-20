@@ -31,14 +31,14 @@ public class CdcUserDetailsManager implements UserDetailsManager {
                                                             .stream()
                                                             .map(GrantedAuthority::getAuthority)
                                                             .toList())
-                                           .principalId(new CdcUser.CdcUserId(user.getUsername(), "github"))
+                                           .principalId(new CdcUser.CdcUserId(user.getUsername(), "cdc"))
                                            .password(passwordEncoder.encode(user.getPassword()))
                                            .build());
     }
 
     @Override
     public void updateUser(UserDetails user) {
-        this.cdcUserRepository.findById(new CdcUser.CdcUserId(user.getUsername(), "github"))
+        this.cdcUserRepository.findById(new CdcUser.CdcUserId(user.getUsername(), "cdc"))
                 .ifPresentOrElse(
                         userFound -> {
                             var u = userFound.toBuilder();
@@ -64,7 +64,7 @@ public class CdcUserDetailsManager implements UserDetailsManager {
 
     @Override
     public void deleteUser(String username) {
-        this.cdcUserRepository.deleteById(new CdcUser.CdcUserId(username, "github"));
+        this.cdcUserRepository.deleteById(new CdcUser.CdcUserId(username, "cdc"));
     }
 
     @Override
@@ -74,7 +74,7 @@ public class CdcUserDetailsManager implements UserDetailsManager {
                 .ifPresentOrElse(auth -> {
                     if (auth instanceof UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken
                             && passwordEncoder.matches(oldPassword, Objects.toString(auth.getCredentials()))) {
-                        this.cdcUserRepository.findById(new CdcUser.CdcUserId(auth.getName(), "github"))
+                        this.cdcUserRepository.findById(new CdcUser.CdcUserId(auth.getName(), "cdc"))
                                 .ifPresentOrElse(
                                         user -> {
                                             user.setPassword(passwordEncoder.encode(newPassword));
@@ -95,7 +95,7 @@ public class CdcUserDetailsManager implements UserDetailsManager {
 
     @Override
     public boolean userExists(String username) {
-        return cdcUserRepository.existsById(new CdcUser.CdcUserId(username, "github"));
+        return cdcUserRepository.existsById(new CdcUser.CdcUserId(username, "cdc"));
     }
 
     @Override

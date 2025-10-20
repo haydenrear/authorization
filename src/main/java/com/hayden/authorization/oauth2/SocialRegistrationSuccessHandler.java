@@ -1,6 +1,7 @@
 package com.hayden.authorization.oauth2;
 
 import com.google.common.collect.Sets;
+import com.hayden.authorization.config.AuthorizationServerConfigProps;
 import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserRepository;
 import jakarta.servlet.ServletException;
@@ -8,6 +9,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -38,7 +40,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @Slf4j
 public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHandler {
-    public static final HashSet<String> AUTHORIZED_SCOPES = Sets.newHashSet("openid", "user", "user:email", "read:user", "profile", "address", "phone", "email");
+    private final AuthorizationServerConfigProps configProps;
     private final OAuth2AuthorizationService authorizationService;
     private final CdcUserRepository cdcUserRepository;
     private final RegisteredClientRepository registeredClientRepository;
@@ -49,7 +51,6 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
 
         if (authentication instanceof OAuth2AuthenticationToken auth
             && auth.getPrincipal() instanceof CdcUser user) {
-//                                 create a jwt token from this oauth2 authentication token with our key
             var found = registeredClientRepository.findById("cdc");
 
             OAuth2TokenContext tokenContext = DefaultOAuth2TokenContext
@@ -69,19 +70,13 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
                                     .build();
                         }
                     })
-                    .authorizedScopes(Sets.newHashSet(AUTHORIZED_SCOPES))
+                    .authorizedScopes(Sets.newHashSet(configProps.getAuthorizedScopes()))
                     .tokenType(OAuth2TokenType.ACCESS_TOKEN)
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrant(auth)
                     .build();
 
-            var generator = new JwtGenerator(jwtEncoder);
-            generator.setJwtCustomizer(context -> user.getAttributes()
-                                                      .entrySet()
-                                                      .stream()
-                                                      .filter(e -> Objects.nonNull(e.getValue()))
-                                                      .forEach(keyValue -> context.getClaims()
-                                                                                  .claim(keyValue.getKey(), keyValue.getValue())));
+            var generator = getJwtGenerator(user);
 
             var generated = generator.generate(tokenContext);
 
@@ -104,27 +99,60 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
         }
     }
 
-    private void handleAuthorizationCode(HttpServletResponse response, CdcUser user, String t, Jwt generated, OAuth2TokenContext tokenContext, RegisteredClient found) {
+    private @NotNull JwtGenerator getJwtGenerator(CdcUser user) {
+        var generator = new JwtGenerator(jwtEncoder);
+
+        generator.setJwtCustomizer(context -> user.getAttributes()
+                                                  .entrySet()
+                                                  .stream()
+                                                  .filter(e -> Objects.nonNull(e.getValue()))
+                                                  .forEach(keyValue -> context.getClaims()
+                                                                              .claim(keyValue.getKey(), keyValue.getValue())));
+        return generator;
+    }
+
+    private void handleAuthorizationCode(HttpServletResponse response, CdcUser user, String jwtToken, Jwt generated,
+                                         OAuth2TokenContext tokenContext, RegisteredClient found) {
         try {
-            user.setJwtToken(t);
+            user.setJwtToken(jwtToken);
             cdcUserRepository.save(user);
             OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER,
-                    t,
+                    jwtToken,
                     generated.getIssuedAt(),
                     generated.getExpiresAt(),
                     tokenContext.getAuthorizedScopes());
+
+            Map<String, Object> claims = new HashMap<>();
+
+            Optional.ofNullable(user.getEmail())
+                    .ifPresent(s -> claims.put("email", s));
+            Optional.ofNullable(user.getUsername())
+                    .ifPresent(s -> {
+                        claims.put("username", s);
+                        claims.put("preferredUsername", s);
+                    });
+            Optional.ofNullable(user.getName())
+                    .ifPresent(s -> claims.put("name", s));
+            Optional.ofNullable(user.getProfile())
+                    .ifPresent(s -> claims.put("profile", s));
+            Optional.ofNullable(user.getPrincipalId().principalId())
+                    .ifPresent(s -> claims.put("principalId", s));
+            Optional.ofNullable(user.getPrincipalId().clientId())
+                    .ifPresent(s -> claims.put("clientId", s));
+
+            claims.put("cdc", "true");
 
             var idToken = new OidcIdToken(
                     accessToken.getTokenValue(),
                     accessToken.getIssuedAt(),
                     accessToken.getExpiresAt(),
-                    Map.of("email", user.getEmail()));
+                    claims);
 
             OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
                     .withRegisteredClient(found)
                     .principalName(user.getName())
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                    .authorizedScopes(AUTHORIZED_SCOPES);
+                    .authorizedScopes(new HashSet<>(configProps.getAuthorizedScopes()));
 
             authorizationBuilder.token(idToken,
                     (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, idToken.getClaims()));

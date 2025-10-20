@@ -1,5 +1,6 @@
 package com.hayden.authorization.password;
 
+import com.hayden.authorization.config.AuthorizationServerConfigProps;
 import com.hayden.authorization.oauth2.SocialRegistrationOAuth2UserService;
 import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
 import org.apache.commons.logging.Log;
@@ -39,6 +40,9 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
     private final Log logger = LogFactory.getLog(getClass());
     private final OAuth2AuthorizationService authorizationService;
     private final OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator;
+
+    @Autowired
+    private AuthorizationServerConfigProps configProps;
 
     @Autowired
     private AuthenticationManager passwordAuthenticationManager;
@@ -93,7 +97,7 @@ public class PasswordCredentialsAuthenticationProvider implements Authentication
             this.logger.trace("Validated token request parameters");
         }
 
-        authorizedScopes.addAll(SocialRegistrationSuccessHandler.AUTHORIZED_SCOPES);
+        authorizedScopes.addAll(new HashSet<>(configProps.getAuthorizedScopes()));
 
         // @formatter:off
         OAuth2TokenContext tokenContext = DefaultOAuth2TokenContext.builder()

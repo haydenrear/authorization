@@ -5,6 +5,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import lombok.SneakyThrows;
 import org.hamcrest.Matchers;
 import org.intellij.lang.annotations.Language;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.UUID;
@@ -25,19 +27,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-
-//import static com.github.tomakehurst.wiremock.client.WireMock.get;
-
 
 @SpringBootTest
 @ExtendWith(SpringExtension.class)
 @AutoConfigureMockMvc
-@ActiveProfiles("test-auth")
+@ActiveProfiles({"test-auth", "test"})
 public class GithubAuthorizationCodeAuthenticationProviderTest {
 
     @Autowired
@@ -79,35 +78,30 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
     @SneakyThrows
     @Test
     public void doTestGithubAuthorizationCodeFlow() {
-        var found = clientRegistrationRepository.findByClientId("Ov23li6AX6ixxIAZ8llp");
-        AtomicReference<String> jwtToken = new AtomicReference<>();
-        AtomicReference<String> authorizationCode = new AtomicReference<>();
+        String githubClientId = "Ov23li6AX6ixxIAZ8llp";
+        var found = this.clientRegistrationRepository.findByClientId(githubClientId);
+        assertThat(found).isNotNull();
 
-        AtomicReference<String> state = new AtomicReference<>();
+        AtomicReference<String> jwtToken = new AtomicReference<>();
 
         var authorize = mockMvc.perform(
                         get("/oauth2/authorization/github")
                                 .with(csrf())
                 )
                 .andExpect(status().is3xxRedirection())
-                .andDo(mvc -> {
-                    var b = UriComponentsBuilder.fromUriString(mvc.getResponse().getRedirectedUrl())
-                                    .build();
-                    var stateParam = b.getQueryParams().get("state").getFirst();
-                    state.set(stateParam.replaceAll("%.*$", ""));
-                })
                 .andReturn();
 
+        assertThat(authorize.getRequest().getSession()).isNotNull();
+        assertThat(authorize.getRequest().getSession()).isInstanceOf(MockHttpSession.class);
         MockHttpSession session = (MockHttpSession) authorize.getRequest().getSession();
 
-        // Step 2: GitHub redirects back with the authorization code
+        String oauth2AuthorizationState = getOAuth2AuthorizationState(session);
         var result = mockMvc.perform(
                         get("/login/oauth2/code/github")
                                 .with(csrf())
                                 .param("code", UUID.randomUUID().toString())
-                                .param("state",
-                                        ((OAuth2AuthorizationRequest)  session.getAttribute("org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository.AUTHORIZATION_REQUEST")).getState())
-                                .param("client_id", "Ov23li6AX6ixxIAZ8llp")
+                                .param("state", oauth2AuthorizationState)
+                                .param("client_id", githubClientId)
                                 .session(session)
                 )
                 .andDo(print())
@@ -115,12 +109,9 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
                 .andExpect(redirectedUrlPattern("/?token=*"))
                 .andReturn();
 
-        // Extract JWT token from redirect URL
-        String tokenRedirectUrl = result.getResponse().getRedirectedUrl();
-        String token = tokenRedirectUrl.substring(tokenRedirectUrl.indexOf("token=") + 6);
-        jwtToken.set(token);
-        
-        // Verify JWT is valid and contains expected claims
+        var token = extractToken(result, jwtToken);
+        Assertions.assertNotNull(token, "JWT should not be null");
+
         var decoded = Assertions.assertDoesNotThrow(() -> jwtDecoder.decode(token));
         Assertions.assertNotNull(decoded, "Decoded JWT should not be null");
         
@@ -129,8 +120,7 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
         Assertions.assertTrue(
                 Stream.of("openid", "profile", "email")
                         .allMatch(decodedScopes::contains),
-                "JWT should contain openid, profile, and email scopes"
-        );
+                "JWT should contain openid, profile, and email scopes");
         
         // Step 3: Use the JWT token to make an authenticated request
         mockMvc.perform(
@@ -141,6 +131,40 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
         .andExpect(status().is2xxSuccessful())
         .andExpect(jsonPath("$", Matchers.notNullValue()))
         .andDo(print());
+
+        mockMvc.perform(
+                        get("/userinfo")
+                                .with(csrf())
+                                .param("client_id", githubClientId)
+                                .param("client_secret", found.getClientSecret())
+                                .header(HttpHeaders.AUTHORIZATION, "Bearer %s".formatted(jwtToken.get()))
+                )
+                .andExpect(status().is2xxSuccessful())
+                .andExpect(jsonPath("$", Matchers.notNullValue()))
+                .andDo(print());
+    }
+
+    private static @NotNull String getOAuth2AuthorizationState(MockHttpSession session) {
+        // Step 2: GitHub redirects back with the authorization code
+        assertThat(session).isNotNull();
+        Object authRequest = session.getAttribute("org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository.AUTHORIZATION_REQUEST");
+        assertThat(authRequest).isNotNull();
+        assertThat(authRequest).isInstanceOf(OAuth2AuthorizationRequest.class);
+        String oauth2AuthorizationState = ((OAuth2AuthorizationRequest) authRequest).getState();
+        assertThat(oauth2AuthorizationState).isNotNull();
+        return oauth2AuthorizationState;
+    }
+
+    private static @NotNull String extractToken(MvcResult result, AtomicReference<String> jwtToken) {
+        // Extract JWT token from redirect URL
+        String tokenRedirectUrl = result.getResponse().getRedirectedUrl();
+        assertThat(tokenRedirectUrl).isNotNull();
+        var token = UriComponentsBuilder.fromUriString(tokenRedirectUrl)
+                .build().getQueryParams().get("token")
+                .getFirst();
+        token = token.replaceAll("%.*$", "");
+        jwtToken.set(token);
+        return token;
     }
 
 }

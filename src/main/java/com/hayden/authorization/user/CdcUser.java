@@ -41,6 +41,12 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     @Column(unique = true)
     String email;
 
+    @Column
+    String name;
+
+    @Column
+    String profile;
+
     @Builder.Default
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
@@ -67,6 +73,10 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
     public record Credits(int current, int history, Instant lastUpdated, List<String> paymentsProcessed) {
         public Credits(int current, int history, Instant lastUpdated) {
             this(current, history, lastUpdated, new ArrayList<>());
+        }
+
+        public static Credits empty() {
+            return new Credits(0, 0, Instant.now(), new ArrayList<>());
         }
     }
 
