@@ -40,3 +40,9 @@ out/
 *.pem
 
 *.jar
+
+fe/node_modules
+
+src/main/resources/static
+out
+.next
