@@ -1,9 +1,5 @@
-import Image from "next/image";
-import styles from "./page.module.css";
-import Dashboard from "@/app/dashboard/page";
+import { DashboardContainer } from "@/components/dashboard/DashboardContainer";
 
 export default function Home() {
-  return (
-      <Dashboard/>
-  );
+  return <DashboardContainer />;
 }
