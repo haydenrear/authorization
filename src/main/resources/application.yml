@@ -21,7 +21,7 @@ spring:
             # (but then you really want OIDC)
           github:
             client-id: Ov23li6AX6ixxIAZ8llp
-            client-secret: 1b9adb0902df6f97555c6c3b2934ab2685406556
+            client-secret: ${GITHUB_SECRET:1b9adb0902df6f97555c6c3b2934ab2685406556}
             scope:
               - user
               - user:email
