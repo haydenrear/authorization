@@ -126,5 +126,7 @@ tasks.register<Copy>("copyFrontendBuild") {
 
 }
 
+tasks.getByPath("processResources").dependsOn("copyFrontendBuild")
+
 // Make bootJar depend on frontend build
 tasks.getByPath("bootJar").dependsOn("copyFrontendBuild")

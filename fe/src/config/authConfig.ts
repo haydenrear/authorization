@@ -13,7 +13,7 @@ export const authConfig = {
   // Custom API endpoints (if your auth server provides them)
   api: {
     tokensEndpoint: '/api/user/tokens',
-    creditsEndpoint: '/api/user/credits',
+    creditsEndpoint: '/api/v1/credits/get-credits',
     stripeCheckoutEndpoint: '/api/stripe/checkout',
   },
 

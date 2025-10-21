@@ -1,8 +1,3 @@
-/*
-IMPORTANT:
-    If using PostgreSQL, update ALL columns defined with 'text' to 'text',
-    as PostgreSQL does not support the 'text' data type.
-*/
 CREATE TABLE IF NOT EXISTS oauth2_authorization (
     id varchar(100) NOT NULL,
     registered_client_id varchar(100) NOT NULL,

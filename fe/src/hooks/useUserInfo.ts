@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { userService } from '@/services/userService'
 import { UserInfo, UserUpdateRequest } from '@/types/user'
 import { parseError, ApiError } from '@/utils/errorHandler'
+import {useAuth} from "@/hooks/useAuth";
 
 export interface UseUserInfoReturn {
   user: UserInfo | null
@@ -26,7 +27,7 @@ export function useUserInfo(): UseUserInfoReturn {
     if (cached) {
       setUser(cached)
     }
-  }, [])
+  }, [useAuth])
 
   const fetchUser = useCallback(async () => {
     setIsLoading(true)
@@ -40,7 +41,7 @@ export function useUserInfo(): UseUserInfoReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [useAuth])
 
   const updateEmail = useCallback(async (email: string) => {
     setIsLoading(true)
@@ -55,7 +56,7 @@ export function useUserInfo(): UseUserInfoReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [useAuth])
 
   const updateUsername = useCallback(async (username: string) => {
     setIsLoading(true)
@@ -70,7 +71,7 @@ export function useUserInfo(): UseUserInfoReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [useAuth])
 
   const clearError = useCallback(() => {
     setError(null)

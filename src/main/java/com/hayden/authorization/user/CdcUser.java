@@ -109,6 +109,42 @@ public class CdcUser extends AuditedEntity<CdcUser.CdcUserId> implements UserDet
         return metadata;
     }
 
+    public Map<String, Object> getClaims() {
+        var claims = getOAuth2TokenContext();
+        Optional.ofNullable(getEmail())
+                .ifPresent(s -> claims.put("email", s));
+        Optional.ofNullable(getUsername())
+                .ifPresent(s -> {
+                    claims.put("username", s);
+                    claims.put("preferredUsername", s);
+                });
+        Optional.ofNullable(getName())
+                .ifPresent(s -> claims.put("name", s));
+        Optional.ofNullable(getProfile())
+                .ifPresent(s -> claims.put("profile", s));
+        Optional.ofNullable(getPrincipalId().principalId())
+                .ifPresent(s -> claims.put("principalId", s));
+        Optional.ofNullable(getPrincipalId().clientId())
+                .ifPresent(s -> claims.put("clientId", s));
+
+        claims.put("cdc", "true");
+        return claims;
+    }
+
+    public String getPrincipalName() {
+        return getUsername();
+    }
+
+    public Map<String, Object> getOAuth2TokenContext() {
+        Map<String, Object> a = new HashMap<>();
+        a.put("username", getUsername());
+        a.put("user", getUsername());
+        a.put("preferredUsername", getUsername());
+        a.put("email", getEmail());
+        a.putAll(getAttributes());
+        return a;
+    }
+
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return Collections.unmodifiableList(
                 authorities.stream()

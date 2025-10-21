@@ -61,7 +61,6 @@ public class SocialRegistrationOAuth2UserService implements OAuth2UserService<OA
                                 "%s_%s".formatted(namePrefix(req), e.getKey()),
                                 e.getValue())));
 
-
         var createUpdate = cdcUserRepository.findById(userId)
                 .map(user -> {
                     user.setAuthorizationCode(accessToken);

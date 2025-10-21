@@ -44,12 +44,12 @@ export class ApiClient {
     if (this.accessToken) {
         return {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.accessToken}`,
             ...options.headers,
         } as HeadersInit
     } else {
         return {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.accessToken}`,
             ...options.headers,
         } as HeadersInit
     }
@@ -81,6 +81,10 @@ export class ApiClient {
       data = await response.json()
     } else {
       data = await response.text()
+    }
+
+    if (response.status === 401) {
+        window.location.href = "/login"
     }
 
     if (!response.ok) {

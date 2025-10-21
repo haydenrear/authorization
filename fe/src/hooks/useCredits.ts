@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { creditService } from '@/services/creditService'
 import { CreditInfo, Transaction } from '@/types/credit'
 import { parseError, ApiError } from '@/utils/errorHandler'
+import {useAuth} from "@/hooks/useAuth";
 
 export interface UseCreditsReturn {
   credits: CreditInfo | null
@@ -36,7 +37,7 @@ export function useCredits(): UseCreditsReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [useAuth])
 
   const fetchTransactions = useCallback(async (limit = 50, offset = 0) => {
     setIsLoading(true)
@@ -50,7 +51,7 @@ export function useCredits(): UseCreditsReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [useAuth])
 
   const initiateCheckout = useCallback(async (amount: number): Promise<string | null> => {
     setIsCheckingOut(true)
@@ -66,7 +67,7 @@ export function useCredits(): UseCreditsReturn {
     } finally {
       setIsCheckingOut(false)
     }
-  }, [])
+  }, [useAuth])
 
   const clearError = useCallback(() => {
     setError(null)

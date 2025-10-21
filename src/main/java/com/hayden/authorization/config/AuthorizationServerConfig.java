@@ -68,6 +68,7 @@ import org.springframework.security.oauth2.server.authorization.web.authenticati
 import org.springframework.security.provisioning.UserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationConverter;
+import org.springframework.security.web.authentication.AuthenticationEntryPointFailureHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
@@ -88,24 +89,24 @@ public class AuthorizationServerConfig {
     @Autowired
     private KeyFiles keyFiles;
 
-    @Bean
-    @Order(1)
-    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
-            throws Exception {
-        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-            .oidc(Customizer.withDefaults());
-//        TODO: this should have the login screen and other should have the oauth2 endpoint
-        http
-                .exceptionHandling((exceptions) -> exceptions
-                        .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"),
-                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML))
-                )
-                .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()));
-
-        return http.build();
-    }
+//    @Bean
+//    @Order(1)
+//    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
+//            throws Exception {
+//        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
+//        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
+//            .oidc(Customizer.withDefaults());
+////        TODO: this should have the login screen and other should have the oauth2 endpoint
+//        http
+//                .exceptionHandling((exceptions) -> exceptions
+//                        .defaultAuthenticationEntryPointFor(
+//                                new LoginUrlAuthenticationEntryPoint("/login"),
+//                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML))
+//                )
+//                .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()));
+//
+//        return http.build();
+//    }
 
     @Bean
     OidcUserInfoAuthenticationProvider oidcUserInfoAuthenticationProvider(OAuth2AuthorizationService authorizationService,
@@ -117,7 +118,7 @@ public class AuthorizationServerConfig {
 
 
     @Bean
-    @Order(2)
+//    @Order(2)
     SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                    OAuth2AuthorizedClientService authorizationClientService,
                                                    OAuth2AuthorizedClientRepository authorizedClientRepository,
@@ -134,7 +135,7 @@ public class AuthorizationServerConfig {
                                     }));
                         })
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/api/v1/credits/stripe/**")
+                        .requestMatchers("/api/v1/credits/stripe/**", "**.css")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
@@ -145,7 +146,11 @@ public class AuthorizationServerConfig {
                                        .authorizedClientRepository(authorizedClientRepository))
                 .httpBasic(Customizer.withDefaults())
                 .csrf(CsrfConfigurer::disable)
-                .formLogin(Customizer.withDefaults());
+                .formLogin(Customizer.withDefaults())
+                .exceptionHandling((exceptions) -> exceptions
+                .defaultAuthenticationEntryPointFor(
+                        new LoginUrlAuthenticationEntryPoint("/login"),
+                        new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
 
         return http.build();
     }
@@ -326,7 +331,7 @@ public class AuthorizationServerConfig {
         RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)
-                .keyID(UUID.randomUUID().toString())
+                .keyID("key")
                 .build();
         JWKSet jwkSet = new JWKSet(rsaKey);
         return new ImmutableJWKSet<>(jwkSet);

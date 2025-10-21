@@ -9,8 +9,7 @@ class UserService {
   async fetchUserInfo(): Promise<UserInfo> {
     try {
       const userInfo = await apiClient.get<UserInfo>(
-        authConfig.oauth2.userinfoEndpoint
-      )
+        authConfig.oauth2.userinfoEndpoint)
       this.userInfoCache = userInfo
       this.saveUserToStorage(userInfo)
       return userInfo

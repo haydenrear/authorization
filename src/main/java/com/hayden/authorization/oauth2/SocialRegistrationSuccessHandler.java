@@ -57,7 +57,7 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
                     .builder()
                     .registeredClient(found)
                     .principal(authentication)
-                    .context(a -> a.putAll(user.getAttributes()))
+                    .context(a -> a.putAll(user.getOAuth2TokenContext()))
                     .authorizationServerContext(new AuthorizationServerContext() {
                         @Override
                         public String getIssuer() {
@@ -122,25 +122,7 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
                     generated.getExpiresAt(),
                     tokenContext.getAuthorizedScopes());
 
-            Map<String, Object> claims = new HashMap<>();
-
-            Optional.ofNullable(user.getEmail())
-                    .ifPresent(s -> claims.put("email", s));
-            Optional.ofNullable(user.getUsername())
-                    .ifPresent(s -> {
-                        claims.put("username", s);
-                        claims.put("preferredUsername", s);
-                    });
-            Optional.ofNullable(user.getName())
-                    .ifPresent(s -> claims.put("name", s));
-            Optional.ofNullable(user.getProfile())
-                    .ifPresent(s -> claims.put("profile", s));
-            Optional.ofNullable(user.getPrincipalId().principalId())
-                    .ifPresent(s -> claims.put("principalId", s));
-            Optional.ofNullable(user.getPrincipalId().clientId())
-                    .ifPresent(s -> claims.put("clientId", s));
-
-            claims.put("cdc", "true");
+            Map<String, Object> claims = user.getClaims();
 
             var idToken = new OidcIdToken(
                     accessToken.getTokenValue(),
@@ -150,7 +132,7 @@ public class SocialRegistrationSuccessHandler implements AuthenticationSuccessHa
 
             OAuth2Authorization.Builder authorizationBuilder = OAuth2Authorization
                     .withRegisteredClient(found)
-                    .principalName(user.getName())
+                    .principalName(user.getPrincipalName())
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizedScopes(new HashSet<>(configProps.getAuthorizedScopes()));
 

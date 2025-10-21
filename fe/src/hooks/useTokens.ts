@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { jwtService } from '@/services/jwtService'
 import { Token, TokenCreateRequest, TokenResponse } from '@/types/token'
 import { parseError, ApiError } from '@/utils/errorHandler'
+import {useAuth} from "@/hooks/useAuth";
 
 export interface UseTokensReturn {
   tokens: Token[]
@@ -34,7 +35,7 @@ export function useTokens(): UseTokensReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [useAuth])
 
   const createToken = useCallback(
     async (request: TokenCreateRequest): Promise<TokenResponse | null> => {
@@ -69,8 +70,7 @@ export function useTokens(): UseTokensReturn {
         throw apiError
       }
     },
-    []
-  )
+    [useAuth])
 
   const clearError = useCallback(() => {
     setError(null)
