@@ -1,6 +1,6 @@
 import {apiClient} from "./apiClient";
 import {authConfig} from "@/config/authConfig";
-import {Token, TokenCreateRequest, TokenResponse} from "@/types/token";
+import {GetTokensResponse, Token, TokenCreateRequest, TokenResponse} from "@/types/token";
 import {OAuth2RevokeRequest} from "@/types/oauth";
 import {decode, JwtPayload} from "jsonwebtoken"
 import {authService} from "@/services/authService";
@@ -184,11 +184,11 @@ class JwtService {
         return token;
     }
 
-    async listTokens(): Promise<Token[]> {
+    async listTokens(): Promise<GetTokensResponse> {
         try {
             // This endpoint should exist on your auth server
             // It returns all JWT tokens/API keys for the current user
-            const tokens = await apiClient.get<Token[]>(
+            const tokens = await apiClient.get<GetTokensResponse>(
                 authConfig.api.tokensEndpoint,
             );
             return tokens;

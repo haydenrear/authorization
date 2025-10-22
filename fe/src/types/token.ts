@@ -1,10 +1,34 @@
 export interface Token {
-  jti: string;
-  created_at: string;
-  expires_at: string;
-  scope: string;
-  last_used?: string;
-  name?: string;
+  tokenValue: string;
+  issuedAt: string;
+  expiresAt: string;
+  tokenType: {
+      value: string
+  },
+  scopes: Set<string>
+}
+
+export interface AccessToken {
+    token: Token;
+    metadata: Map<string, object>;
+    active: boolean;
+    expired: boolean;
+    claims: Map<string, object>;
+    invalidated: boolean;
+    beforeUser: boolean;
+}
+
+export interface GetTokensResponse {
+    token: [AccessToken],
+    success: boolean,
+    error: string
+}
+
+export interface TokenResponse {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    scope?: string;
 }
 
 export interface TokenCreateRequest {
@@ -20,14 +44,9 @@ export interface TokenCreateRequest {
   client_secret?: string;
 }
 
-export interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  scope?: string;
-}
 
 export interface TokenRevokeRequest {
   token: string;
   type_hint?: string;
 }
+

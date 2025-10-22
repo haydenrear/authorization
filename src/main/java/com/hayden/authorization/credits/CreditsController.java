@@ -1,5 +1,6 @@
 package com.hayden.authorization.credits;
 
+import com.hayden.authorization.stripe.StripePaymentLinkService;
 import com.hayden.authorization.stripe.StripeWebhookService;
 import com.hayden.authorization.user.CdcUser;
 import com.hayden.authorization.user.CdcUserRepository;
@@ -7,6 +8,12 @@ import com.hayden.authorization.user.QCdcUser;
 import com.hayden.commitdiffmodel.credits.CreditsResponse;
 import com.hayden.commitdiffmodel.credits.GetAndDecrementCreditsRequest;
 import com.hayden.commitdiffmodel.stripe.PaymentData;
+import com.hayden.utilitymodule.result.Result;
+import com.stripe.Stripe;
+import com.stripe.exception.StripeException;
+import com.stripe.model.PaymentLink;
+import com.stripe.param.PaymentLinkCreateParams;
+import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.repository.query.FluentQuery;
@@ -27,7 +34,29 @@ import java.util.UUID;
 public class CreditsController {
 
     private final CdcUserRepository userRepository;
+
     private final StripeWebhookService stripeWebhookService;
+
+    private final StripePaymentLinkService linkService;
+
+    @Builder
+    public record PaymentLinkResult(String link, boolean success, String error) {}
+
+    @PostMapping("/stripe/create-link")
+    public ResponseEntity<PaymentLinkResult> createPaymentLink(@AuthenticationPrincipal Jwt authenticatedPrincipal) {
+        return linkService.createPaymentLink()
+                .map(pm -> PaymentLinkResult.builder().link(null).build())
+                .map(ResponseEntity::ok)
+                .onErrorFlatMapResult(pe -> Result
+                        .<PaymentLinkResult, StripePaymentLinkService.PaymentError>ok(
+                                PaymentLinkResult.builder().success(false)
+                                        .error(pe.getMessage())
+                                        .build())
+                        .map(r -> ResponseEntity.badRequest()
+                                .body(r))
+                )
+                .unwrap();
+    }
 
     /**
      * Stripe webhook handler for payment completion.
@@ -35,10 +64,9 @@ public class CreditsController {
      */
     @PostMapping("/stripe/add-credits")
     public ResponseEntity<Void> handleStripeWebhook(@RequestHeader("Stripe-Signature") String sigHeader,
-                                                     @RequestBody String payload) {
-            PaymentData event = stripeWebhookService.validateAndParseWebhook(payload, sigHeader);
-        System.out.println(payload);
-        
+                                                    @RequestBody String payload) {
+        PaymentData event = stripeWebhookService.validateAndParseWebhook(payload, sigHeader);
+
         if (event.isFailure()) {
             log.warn("Invalid or unverifiable Stripe webhook received");
             return ResponseEntity.status(event.status()).build();
@@ -77,16 +105,16 @@ public class CreditsController {
         }
 
         CdcUser user = userOpt.getFirst();
-        
+
         // Calculate credits to add based on the amount paid
         long amountCents = event.amountPaid();
         int creditsToAdd = stripeWebhookService.calculateCredits(amountCents);
 
         // Add credits to the user (atomically)
         int newBalance = userRepository.getAndIncrementCredits(user.getPrincipalId(), creditsToAdd, event);
-        
-        log.info("Stripe webhook processed: User {} now has {} credits (added {})", 
-                 user.getEmail(), newBalance, creditsToAdd);
+
+        log.info("Stripe webhook processed: User {} now has {} credits (added {})",
+                user.getEmail(), newBalance, creditsToAdd);
 
         return ResponseEntity.ok().build();
     }
@@ -109,10 +137,10 @@ public class CreditsController {
         }
 
         CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, "cdc");
-        
+
         // Fetch the user
         Optional<CdcUser> userOpt = userRepository.findById(userId);
-        
+
         if (userOpt.isEmpty()) {
             log.warn("User not found: {}", userId);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
@@ -139,13 +167,13 @@ public class CreditsController {
      * Atomically decrements credits for the authenticated user.
      * Returns the new balance if successful, or 401 if insufficient credits.
      */
-    @PostMapping(value = "/get-and-decrement", 
-                 consumes = MediaType.APPLICATION_JSON_VALUE,
-                 produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/get-and-decrement",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CreditsResponse> getAndDecrement(
             @AuthenticationPrincipal Jwt authenticatedPrincipal,
             @RequestBody GetAndDecrementCreditsRequest request) {
-        
+
         if (authenticatedPrincipal == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -153,17 +181,17 @@ public class CreditsController {
         // Extract user ID from JWT
         String principalId = authenticatedPrincipal.getSubject();
         String clientId = authenticatedPrincipal.getClaimAsString("client_id");
-        
+
         if (principalId == null || clientId == null) {
             log.warn("JWT missing required claims: sub or client_id");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
         CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, clientId);
-        
+
         // Atomically decrement credits
         Optional<Integer> newBalanceOpt = userRepository.getAndDecrementCredits(userId, request.getAmount());
-        
+
         if (newBalanceOpt.isEmpty()) {
             // Insufficient credits
             log.debug("User {} attempted to decrement credits but has insufficient balance", userId);
@@ -177,7 +205,7 @@ public class CreditsController {
         }
 
         int newBalance = newBalanceOpt.get();
-        
+
         CreditsResponse response = CreditsResponse.builder()
                 .hasCredits(true)
                 .remaining(newBalance)

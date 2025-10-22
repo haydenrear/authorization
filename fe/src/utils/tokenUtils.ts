@@ -12,12 +12,12 @@ export function formatTokenDate(dateString: string): string {
 }
 
 export function isTokenExpired(token: Token): boolean {
-  const expiresAt = new Date(token.expires_at)
+  const expiresAt = new Date(token.expiresAt)
   return expiresAt < new Date()
 }
 
 export function getTimeUntilExpiry(token: Token): string {
-  const expiresAt = new Date(token.expires_at)
+  const expiresAt = new Date(token.expiresAt)
   const now = new Date()
   const diffMs = expiresAt.getTime() - now.getTime()
 
@@ -49,8 +49,8 @@ export function maskToken(token: string, visibleChars: number = 8): string {
 
 export function sortTokensByDate(tokens: Token[], order: 'asc' | 'desc' = 'desc'): Token[] {
   return [...tokens].sort((a, b) => {
-    const dateA = new Date(a.created_at).getTime()
-    const dateB = new Date(b.created_at).getTime()
+    const dateA = new Date(a.issuedAt).getTime()
+    const dateB = new Date(b.issuedAt).getTime()
     return order === 'desc' ? dateB - dateA : dateA - dateB
   })
 }

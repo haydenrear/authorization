@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -45,6 +46,8 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
     JwtDecoder jwtDecoder;
     @Autowired
     RegisteredClientRepository clientRegistrationRepository;
+    @Autowired
+    JdbcTemplate template;
 
     private static final WireMockServer wireMockServer = new WireMockServer(8081);
 
@@ -72,6 +75,14 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
     @AfterAll
     public static void after() {
         wireMockServer.stop();
+    }
+
+    @BeforeEach
+    public void doSetupBeforeEach() {
+        template.execute("""
+        delete FROM oauth2_authorization;
+        delete FROM cdc_users;
+        """);
     }
 
 
@@ -134,6 +145,17 @@ public class GithubAuthorizationCodeAuthenticationProviderTest {
 
         mockMvc.perform(
                         get("/userinfo")
+                                .with(csrf())
+                                .param("client_id", githubClientId)
+                                .param("client_secret", found.getClientSecret())
+                                .header(HttpHeaders.AUTHORIZATION, "Bearer %s".formatted(jwtToken.get()))
+                )
+                .andExpect(status().is2xxSuccessful())
+                .andExpect(jsonPath("$", Matchers.notNullValue()))
+                .andDo(print());
+
+        mockMvc.perform(
+                        get("/api/v1/tokens/get-tokens")
                                 .with(csrf())
                                 .param("client_id", githubClientId)
                                 .param("client_secret", found.getClientSecret())
