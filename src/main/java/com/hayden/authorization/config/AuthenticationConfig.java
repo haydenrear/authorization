@@ -49,18 +49,6 @@ public class AuthenticationConfig {
 
     @SneakyThrows
     @Bean
-    @Order(Ordered.HIGHEST_PRECEDENCE)
-    public CommandLineRunner logDb(
-            @Value("${spring.datasource.username}") String username,
-            @Value("${spring.datasource.password}") String password,
-            @Value("${spring.datasource.url}") String url
-    ) {
-        log.info("Found {}, {}, {}", username, url, password);
-        return args -> {};
-    }
-
-    @SneakyThrows
-    @Bean
     @Profile("test-auth")
     public CommandLineRunner initializeAuth(DataSource dataSource,
                                             CdcUserDetailsManager userDetailsService,
@@ -122,15 +110,13 @@ public class AuthenticationConfig {
                 .filter(Resource::exists)
                 .map(r -> {
                     try {
-                        return r.getFile();
+                        return r.getURI().toString();
                     } catch (IOException e) {
                         log.error("Error {}", e);
                     }
                     return null;
                 })
                 .filter(Objects::nonNull)
-                .map(File::getAbsolutePath)
-                .map(s -> "file:" + s)
                 .toList();
         settings.setSchemaLocations(found);
         settings.setMode(DatabaseInitializationMode.ALWAYS);

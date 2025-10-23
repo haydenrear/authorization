@@ -82,7 +82,7 @@ spring:
         enabled: false
 
 keystore:
-  key-path: {{PROJ_DIR}}/keys
+  key-path: ${KEY_PATH:{{PROJ_DIR}}/keys}
   key-name: cdc-key
 
 authorization-server:
