@@ -60,7 +60,7 @@ spring:
       driver-class-name: org.postgresql.Driver
     driver-class-name: org.postgresql.Driver
   liquibase:
-    enabled: true
+    enabled: false
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
     user: postgres
     password: postgres

@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.hayden.authorization.user.CdcUserDetails;
 import com.hayden.authorization.user.CdcUserDetailsManager;
 import com.hayden.authorization.user.CdcUserRepository;
+import com.zaxxer.hikari.HikariDataSource;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.boot.jdbc.init.DataSourceScriptDatabaseInitializer;
@@ -16,6 +18,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -43,6 +47,17 @@ public class AuthenticationConfig {
         };
     }
 
+    @SneakyThrows
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    public CommandLineRunner logDb(
+            @Value("${spring.datasource.username}") String username,
+            @Value("${spring.datasource.password}") String password,
+            @Value("${spring.datasource.url}") String url
+    ) {
+        log.info("Found {}, {}, {}", username, url, password);
+        return args -> {};
+    }
 
     @SneakyThrows
     @Bean
