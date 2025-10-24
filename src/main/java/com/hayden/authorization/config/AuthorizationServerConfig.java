@@ -118,28 +118,21 @@ public class AuthorizationServerConfig {
 
 
     @Bean
-//    @Order(2)
     SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                    OAuth2AuthorizedClientService authorizationClientService,
                                                    OAuth2AuthorizedClientRepository authorizedClientRepository,
                                                    SocialRegistrationSuccessHandler socialRegistrationSuccessHandler,
-                                                   OidcUserInfoAuthenticationProvider provider)
-            throws Exception {
-        http
-                .with(
+                                                   OidcUserInfoAuthenticationProvider provider) throws Exception {
+        http.with(
                         OAuth2AuthorizationServerConfigurer.authorizationServer(),
-                        auth -> {
-                            auth.oidc(oidcConfigurer -> oidcConfigurer
-                                    .userInfoEndpoint(userInfo -> {
-                                        userInfo.authenticationProvider(provider);
-                                    }));
-                        })
+                        auth -> auth
+                                .oidc(oidcConfigurer -> oidcConfigurer
+                                        .userInfoEndpoint(userInfo -> userInfo.authenticationProvider(provider))))
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/api/v1/credits/stripe/**", "**.css", "/actuator/health")
+                        .requestMatchers("/api/v1/credits/stripe/**", "**/*.css","**/*.html", "**/*.js", "/actuator/health")
                         .permitAll()
                         .anyRequest()
-                        .authenticated()
-                )
+                        .authenticated())
                 .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()))
                 .oauth2Login(login -> login.successHandler(socialRegistrationSuccessHandler)
                                        .authorizedClientService(authorizationClientService)
