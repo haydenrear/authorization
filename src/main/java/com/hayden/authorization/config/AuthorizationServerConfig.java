@@ -135,7 +135,7 @@ public class AuthorizationServerConfig {
                                     }));
                         })
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/api/v1/credits/stripe/**", "**.css")
+                        .requestMatchers("/api/v1/credits/stripe/**", "**.css", "/actuator/health")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
