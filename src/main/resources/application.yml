@@ -70,10 +70,12 @@ spring:
     hikari:
       username: postgres
       password: postgres
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
       jdbc-url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
       driver-class-name: org.postgresql.Driver
     driver-class-name: org.postgresql.Driver
   liquibase:
+    driver-class-name: org.postgresql.Driver
     enabled: false
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DATABASE:postgres}
     user: postgres
