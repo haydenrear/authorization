@@ -96,6 +96,21 @@ node {
 }
 
 // Build the Next.js frontend
+tasks.register<com.github.gradle.node.npm.task.NpmTask>("installFrontend") {
+    description = "Build Next.js frontend application"
+    workingDir.set(file("${project.projectDir}/fe"))
+
+    args.set(listOf("install"))
+
+    inputs.files("${project.projectDir}/fe/src")
+    inputs.file("${project.projectDir}/fe/package.json")
+    inputs.file("${project.projectDir}/fe/next.config.ts")
+
+    outputs.dir("${project.projectDir}/fe/.next")
+
+}
+
+// Build the Next.js frontend
 tasks.register<com.github.gradle.node.npm.task.NpmTask>("buildFrontend") {
     description = "Build Next.js frontend application"
     workingDir.set(file("${project.projectDir}/fe"))
@@ -108,6 +123,7 @@ tasks.register<com.github.gradle.node.npm.task.NpmTask>("buildFrontend") {
 
     outputs.dir("${project.projectDir}/fe/.next")
 
+    dependsOn("installFrontend")
     finalizedBy("copyFrontendBuild")
 }
 
@@ -119,7 +135,7 @@ tasks.register<Copy>("copyFrontendBuild") {
     }
 
     description = "Copy Next.js build output to static resources"
-    dependsOn("buildFrontend")
+    dependsOn("installFrontend", "buildFrontend")
 
     from("${project.projectDir}/fe/out")
     into("${project.layout.projectDirectory}/src/main/resources/static")
