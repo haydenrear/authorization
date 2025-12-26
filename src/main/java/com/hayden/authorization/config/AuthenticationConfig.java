@@ -78,12 +78,6 @@ public class AuthenticationConfig {
     }
 
     @Bean
-    AuthenticationManager passwordAuthenticationManager(DaoAuthenticationProvider authenticationProviderList) {
-        ProviderManager p = new ProviderManager(authenticationProviderList);
-        return p;
-    }
-
-    @Bean
     PasswordEncoder passwordEncoder() {
         return NoOpPasswordEncoder.getInstance();
     }

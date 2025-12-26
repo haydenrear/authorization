@@ -112,7 +112,7 @@ public class CreditsAuthenticationTest {
                         get("/api/v1/credits/get-credits")
                                 .contentType(MediaType.APPLICATION_JSON)
                 )
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().is3xxRedirection())
                 .andDo(print());
     }
 
@@ -314,12 +314,12 @@ public class CreditsAuthenticationTest {
                        post("/oauth2/token")
                                .with(csrf())
                                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                               .param("grant_type", AuthorizationGrantType.PASSWORD.getValue())
+                               .param("grant_type", AuthorizationGrantType.JWT_BEARER.getValue())
                                .param("client_id", "cdc-oauth2-client")
                                .param("client_secret", "234234lkjsldkdjfsd")
-                               .header(HttpHeaders.AUTHORIZATION, "Basic %s".formatted(Base64.encode("whatever:hello!!!")))
+                               .header(HttpHeaders.AUTHORIZATION, "Bearer %s".formatted("whatever:hello!!!"))
                )
-               .andExpect(redirectedUrl("http://localhost/login"))
+               .andExpect(status().is(401))
                .andDo(print());
     }
 

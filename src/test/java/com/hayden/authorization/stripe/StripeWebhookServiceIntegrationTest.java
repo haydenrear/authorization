@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -95,7 +96,17 @@ public class StripeWebhookServiceIntegrationTest {
         ObjectNode dataObject = (ObjectNode) rootNode.get("data").get("object");
         
         dataObject.put("amount_received", newAmount);
-        
+
+        return objectMapper.writeValueAsString(rootNode);
+    }
+
+    @SneakyThrows
+    private String modifyIdempotentId(String eventJson) {
+        JsonNode rootNode = objectMapper.readTree(eventJson);
+        ObjectNode dataObject = (ObjectNode) rootNode.get("request");
+
+        dataObject.put("idempotency_key", UUID.randomUUID().toString());
+
         return objectMapper.writeValueAsString(rootNode);
     }
 
@@ -259,7 +270,7 @@ public class StripeWebhookServiceIntegrationTest {
     @Test
     public void testStripeWebhook_SuccessfulPayment() {
         // Create a test user
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("stripe-user", "stripe-client");
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("stripe-user", "cdc");
         CdcUser user = CdcUser.builder()
                 .principalId(userId)
                 .email("stripe-customer@example.com")
@@ -295,7 +306,7 @@ public class StripeWebhookServiceIntegrationTest {
     @Test
     public void testStripeWebhook_ZeroAmount() {
         // Create a test user
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("zero-amount-user", "stripe-client");
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("zero-amount-user", "cdc");
         CdcUser user = CdcUser.builder()
                 .principalId(userId)
                 .email("zero-amount@example.com")
@@ -330,7 +341,7 @@ public class StripeWebhookServiceIntegrationTest {
     @Test
     public void testStripeWebhook_MultiplePayments() {
         // Create a test user
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("multi-payment-user", "stripe-client");
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("multi-payment-user", "cdc");
         CdcUser user = CdcUser.builder()
                 .principalId(userId)
                 .email("multi-payment@example.com")
@@ -376,7 +387,28 @@ public class StripeWebhookServiceIntegrationTest {
                 .andDo(print());
 
         CdcUser afterPayment2 = userRepository.findById(userId).orElseThrow();
-        int expectedAfterPayment2 = expectedAfterPayment1 + (2500 * creditsPerCent);
+//        didn't update idempotent id
+        int expectedAfterPayment2 = expectedAfterPayment1 ;
+        assert afterPayment2.getCredits().current() == expectedAfterPayment2;
+
+        eventJson = loadTestEventJson("payment-intent-succeeded.json");
+        modifiedJson = modifyPaymentIntentEmail(eventJson, "multi-payment@example.com");
+        modifiedJson = modifyIdempotentId(modifiedJson);
+        modifiedJson = modifyPaymentIntentAmount(modifiedJson, 2500);
+        webhookSecret = getWebhookSecret(modifiedJson);
+
+        mockMvc.perform(
+                        post("/api/v1/credits/stripe/add-credits")
+                                .with(csrf())
+                                .header("Stripe-Signature", webhookSecret)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(modifiedJson)
+                )
+                .andExpect(status().isOk())
+                .andDo(print());
+
+        afterPayment2 = userRepository.findById(userId).orElseThrow();
+        expectedAfterPayment2 = expectedAfterPayment1 + (2500 * creditsPerCent);
         assert afterPayment2.getCredits().current() == expectedAfterPayment2;
     }
 
@@ -384,7 +416,7 @@ public class StripeWebhookServiceIntegrationTest {
     @Test
     public void testStripeWebhook_LargePaymentAmount() {
         // Create a test user
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("large-payment-user", "stripe-client");
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId("large-payment-user", "cdc");
         CdcUser user = CdcUser.builder()
                 .principalId(userId)
                 .email("large-payment@example.com")

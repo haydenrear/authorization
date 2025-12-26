@@ -4,8 +4,6 @@ import com.google.common.collect.Lists;
 import com.hayden.authorization.client_credentials.ClientCredentialsParentExtractor;
 import com.hayden.authorization.oauth2.SocialRegistrationSuccessHandler;
 import com.hayden.authorization.oidc.UserEndpointUserInfoMapper;
-import com.hayden.authorization.password.PasswordCredentialsAuthenticationProvider;
-import com.hayden.authorization.password.PasswordCredentialsGrantAuthenticationConverter;
 import com.hayden.commitdiffmodel.config.DisableGraphQl;
 import com.hayden.utilitymodule.security.KeyConfigProperties;
 import com.hayden.utilitymodule.security.KeyFiles;
@@ -89,25 +87,6 @@ public class AuthorizationServerConfig {
     @Autowired
     private KeyFiles keyFiles;
 
-//    @Bean
-//    @Order(1)
-//    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
-//            throws Exception {
-//        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-//        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-//            .oidc(Customizer.withDefaults());
-////        TODO: this should have the login screen and other should have the oauth2 endpoint
-//        http
-//                .exceptionHandling((exceptions) -> exceptions
-//                        .defaultAuthenticationEntryPointFor(
-//                                new LoginUrlAuthenticationEntryPoint("/login"),
-//                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML))
-//                )
-//                .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()));
-//
-//        return http.build();
-//    }
-
     @Bean
     OidcUserInfoAuthenticationProvider oidcUserInfoAuthenticationProvider(OAuth2AuthorizationService authorizationService,
                                                                           UserEndpointUserInfoMapper mapper) {
@@ -129,10 +108,15 @@ public class AuthorizationServerConfig {
                                 .oidc(oidcConfigurer -> oidcConfigurer
                                         .userInfoEndpoint(userInfo -> userInfo.authenticationProvider(provider))))
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/api/v1/credits/stripe/**", "**/*.css","**/*.html", "**/*.js", "/actuator/health")
+                        .requestMatchers("/api/v1/credits/stripe/**", "*/*.css","*/*.html", "*/*.js", "/actuator/health")
                         .permitAll()
                         .anyRequest()
                         .authenticated())
+                .exceptionHandling((exceptions) -> exceptions
+                        .defaultAuthenticationEntryPointFor(
+                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML))
+                )
                 .oauth2ResourceServer((resourceServer) -> resourceServer.jwt(Customizer.withDefaults()))
                 .oauth2Login(login -> login.successHandler(socialRegistrationSuccessHandler)
                                        .authorizedClientService(authorizationClientService)
@@ -176,8 +160,7 @@ public class AuthorizationServerConfig {
 
 
     @Bean
-    BeanPostProcessor oAuth2ClientAuthenticationFilterProcessor(PasswordCredentialsAuthenticationProvider passwordCredentialsAuthenticationProvider,
-                                                                OAuth2X509AuthenticationProvider x509AuthenticationProvider,
+    BeanPostProcessor oAuth2ClientAuthenticationFilterProcessor(OAuth2X509AuthenticationProvider x509AuthenticationProvider,
                                                                 AuthenticationConverter authenticationConverterPassword,
                                                                 OidcUserInfoAuthenticationProvider authenticationProvider) {
         return new BeanPostProcessor() {
@@ -190,7 +173,6 @@ public class AuthorizationServerConfig {
                             oAuth2TokenEndpointFilter.setAuthenticationConverter(authenticationConverterPassword);
                     }
                     case ProviderManager p -> {
-                        addProviderAsFirst(p, passwordCredentialsAuthenticationProvider);
                         addProviderAsFirst(p, x509AuthenticationProvider);
 
                         p.getProviders().removeIf(aut -> aut.getClass().equals(OidcUserInfoAuthenticationProvider.class));
@@ -238,7 +220,6 @@ public class AuthorizationServerConfig {
                                                             UserDetailsManager userDetailsManager) {
         return new DelegatingAuthenticationConverter(
                 Lists.newArrayList(
-                        new PasswordCredentialsGrantAuthenticationConverter(parentExtractor),
                         new X509AuthenticationConverter(parentExtractor, userDetailsManager),
                         new OAuth2AuthorizationCodeAuthenticationConverter(),
                         new OAuth2DeviceCodeAuthenticationConverter(),
@@ -254,7 +235,6 @@ public class AuthorizationServerConfig {
         if (Objects.equals(clientRegistration.getClientId(), "cdc-oauth2-client")) {
             r = RegisteredClient.withId(clientRegistration.getRegistrationId())
                                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                                .authorizationGrantType(AuthorizationGrantType.PASSWORD)
                                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                                 .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
                                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)

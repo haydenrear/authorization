@@ -207,24 +207,30 @@ public class SocialRegistrationOAuth2UserService implements OAuth2UserService<OA
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .build();
 
-        ResponseEntity<List<Map<String, Object>>> resp = authorizationRestTemplateBuilder.build()
-                .exchange(request, new ParameterizedTypeReference<>() {
-                });
+        try {
 
-        String email = StreamUtil.toStream(resp.getBody())
-                .filter(m -> Boolean.TRUE.equals(m.get("verified")))
-                .sorted((a, b) -> {
-                    if (Boolean.TRUE.equals(a.get("primary"))) {
-                        return -1;
-                    }
+            ResponseEntity<List<Map<String, Object>>> resp = authorizationRestTemplateBuilder.build()
+                    .exchange(request, new ParameterizedTypeReference<>() {
+                    });
 
-                    return 1;
-                })
-                .map(m -> Objects.toString(m.get(serverAttributes.emailAttribute())))
-                .findFirst()
-                .orElse(null);
+            String email = StreamUtil.toStream(resp.getBody())
+                    .filter(m -> Boolean.TRUE.equals(m.get("verified")))
+                    .sorted((a, b) -> {
+                        if (Boolean.TRUE.equals(a.get("primary"))) {
+                            return -1;
+                        }
 
-        return Optional.ofNullable(email);
+                        return 1;
+                    })
+                    .map(m -> Objects.toString(m.get(serverAttributes.emailAttribute())))
+                    .findFirst()
+                    .orElse(null);
+
+            return Optional.ofNullable(email);
+        } catch (Exception e) {
+            log.error("Error attempting to retrieve email.", e);
+            return Optional.empty();
+        }
     }
 
 }

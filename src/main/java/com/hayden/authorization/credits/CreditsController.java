@@ -136,7 +136,7 @@ public class CreditsController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-        CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, "cdc");
+        CdcUser.CdcUserId userId = new CdcUser.CdcUserId(principalId, Optional.ofNullable(authenticatedPrincipal.getClaimAsString("client_id")).orElse("cdc"));
 
         // Fetch the user
         Optional<CdcUser> userOpt = userRepository.findById(userId);

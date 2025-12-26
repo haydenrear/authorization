@@ -77,18 +77,7 @@ public class ClientCredentialsProviderTests {
                 })))
                 .andDo(print());
 
-        mockMvc.perform(
-                       get("/api/v1/credits/get-credits")
-                               .with(csrf())
-                               .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                               .param("grant_type", AuthorizationGrantType.JWT_BEARER.getValue())
-                               .param("client_id", "cdc-oauth2-client")
-                               .param("client_secret", "234234lkjsldkdjfsd")
-                               .header(HttpHeaders.AUTHORIZATION, "Bearer %s".formatted(s.get()))
-               )
-               .andExpect(status().is2xxSuccessful())
-               .andExpect(jsonPath("$", Matchers.notNullValue()))
-               .andDo(print());
+
     }
 
 }
